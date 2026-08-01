@@ -10,7 +10,7 @@ if [[ "${1:-}" == "--require-developer-id" ]]; then
 fi
 
 APP=${1:?"Usage: $0 [--require-developer-id] <path-to-app>"}
-ENTITLEMENTS="$ROOT/build/MiniWhisper.entitlements"
+ENTITLEMENTS="$ROOT/build/FalaDan.entitlements"
 
 if [[ ! -d "$APP" ]]; then
     echo "App bundle not found: $APP" >&2
@@ -28,8 +28,8 @@ find_developer_id_identity() {
 }
 
 choose_identity() {
-    if [[ -n "${MINIWHISPER_DEV_CODESIGN_IDENTITY:-}" && "${MINIWHISPER_DEV_CODESIGN_IDENTITY}" != "-" ]]; then
-        printf '%s\n' "$MINIWHISPER_DEV_CODESIGN_IDENTITY"
+    if [[ -n "${FALADAN_DEV_CODESIGN_IDENTITY:-}" && "${FALADAN_DEV_CODESIGN_IDENTITY}" != "-" ]]; then
+        printf '%s\n' "$FALADAN_DEV_CODESIGN_IDENTITY"
         return
     fi
 
@@ -85,7 +85,7 @@ if [[ -d "$SPARKLE" ]]; then
 fi
 
 sign_if_present "$APP/Contents/Frameworks/whisper.framework"
-sign_if_present "$APP/Contents/Resources/miniwhispercli"
+sign_if_present "$APP/Contents/Resources/faladancli"
 
 codesign --force --sign "$IDENTITY" \
     --entitlements "$ENTITLEMENTS" \

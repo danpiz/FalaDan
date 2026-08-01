@@ -1,7 +1,7 @@
-app_name := "MiniWhisper"
-bundle_id := "com.miniwhisper.dev"
+app_name := "FalaDan"
+bundle_id := "com.faladan.dev"
 team_id := env("CODESIGN_TEAM_ID", "")
-install_path := "/Applications/MiniWhisper Dev.app"
+install_path := "/Applications/FalaDan Dev.app"
 
 default:
     @just --list --unsorted
@@ -20,8 +20,8 @@ dev: kill build package
 # Debug build
 [group('build')]
 build:
-    swift build --product MiniWhisper
-    swift build --product miniwhispercli
+    swift build --product FalaDan
+    swift build --product faladancli
 
 # Create .app bundle (debug)
 [group('build')]
@@ -54,12 +54,12 @@ github-release: sign-and-notarize create-dmg
     #!/usr/bin/env bash
     source version.env
     TAG="v${MARKETING_VERSION}"
-    ZIP="MiniWhisper-${MARKETING_VERSION}.zip"
-    DMG="MiniWhisper.dmg"
+    ZIP="FalaDan-${MARKETING_VERSION}.zip"
+    DMG="FalaDan.dmg"
     git tag -f "$TAG"
     git push -f origin "$TAG"
     gh release create "$TAG" "$ZIP" "$DMG" \
-        --title "MiniWhisper ${MARKETING_VERSION}" \
+        --title "FalaDan ${MARKETING_VERSION}" \
         --generate-notes
 
 # Update homebrew tap with new version
@@ -73,7 +73,7 @@ publish: github-release update-tap
     #!/usr/bin/env bash
     set -euo pipefail
     source version.env
-    just generate-appcast "MiniWhisper-${MARKETING_VERSION}.zip"
+    just generate-appcast "FalaDan-${MARKETING_VERSION}.zip"
     git add appcast.xml
     git commit -m "Update appcast for v${MARKETING_VERSION}"
     git push origin main
@@ -100,7 +100,7 @@ test-update:
 [group('dev')]
 kill:
     -pkill -f "{{app_name}}" 2>/dev/null || true
-    -pkill -f "MiniWhisper Dev" 2>/dev/null || true
+    -pkill -f "FalaDan Dev" 2>/dev/null || true
 
 # Reset TCC permissions (use when permissions get stuck)
 [group('dev')]
@@ -114,6 +114,6 @@ reset-tcc:
 [group('dev')]
 reset-settings:
     -killall "{{app_name}}" 2>/dev/null || true
-    -killall "MiniWhisper Dev" 2>/dev/null || true
+    -killall "FalaDan Dev" 2>/dev/null || true
     defaults delete {{bundle_id}} 2>/dev/null || true
     @echo "Settings reset. Restart the app to use defaults."

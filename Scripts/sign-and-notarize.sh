@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/version.env"
 
-APP_NAME="MiniWhisper"
+APP_NAME="FalaDan"
 APP_BUNDLE="build/${APP_NAME}.app"
 ZIP_NAME="${APP_NAME}-${MARKETING_VERSION}.zip"
 SIGNING_ID="${CODESIGN_IDENTITY:?Set CODESIGN_IDENTITY to your Developer ID Application identity}"
@@ -17,16 +17,16 @@ for fw in "$APP_BUNDLE"/Contents/Frameworks/*.framework; do
     [ -d "$fw" ] && codesign --force --timestamp --options runtime --sign "$SIGNING_ID" "$fw"
 done
 
-CLI_BIN="$APP_BUNDLE/Contents/Resources/miniwhispercli"
+CLI_BIN="$APP_BUNDLE/Contents/Resources/faladancli"
 if [[ -f "$CLI_BIN" ]]; then
-    echo "==> Signing miniwhispercli..."
+    echo "==> Signing faladancli..."
     codesign --force --timestamp --options runtime --sign "$SIGNING_ID" "$CLI_BIN"
 fi
 
 echo "==> Signing with: $SIGNING_ID"
 codesign --force --timestamp --options runtime \
     --sign "$SIGNING_ID" \
-    --entitlements "build/MiniWhisper.entitlements" \
+    --entitlements "build/FalaDan.entitlements" \
     "$APP_BUNDLE"
 
 echo "==> Verifying signature..."

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/version.env"
 
-APP_NAME="MiniWhisper"
+APP_NAME="FalaDan"
 APP_BUNDLE="build/${APP_NAME}.app"
 DMG_NAME="${APP_NAME}.dmg"
 

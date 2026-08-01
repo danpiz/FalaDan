@@ -2,7 +2,7 @@
 #
 # Local end-to-end test of the Sparkle update flow with the real updater:
 #
-#   1. Builds the current version as "MiniWhisper Dev.app", Developer ID
+#   1. Builds the current version as "FalaDan Dev.app", Developer ID
 #      signed (required for UpdaterFactory to enable Sparkle), with its feed
 #      pointed at a localhost appcast.
 #   2. Builds a version-bumped copy, signs it, zips it, and generates a
@@ -22,8 +22,8 @@ cd "$ROOT"
 
 PORT="${PORT:-8123}"
 FEED="http://localhost:${PORT}/appcast.xml"
-INSTALL_PATH="/Applications/MiniWhisper Dev.app"
-DEV_EXEC="${INSTALL_PATH}/Contents/MacOS/MiniWhisper"
+INSTALL_PATH="/Applications/FalaDan Dev.app"
+DEV_EXEC="${INSTALL_PATH}/Contents/MacOS/FalaDan"
 
 if ! command -v generate_appcast &>/dev/null; then
     echo "generate_appcast not found. Install: brew install andyhtran/tap/sparkle-tools" >&2
@@ -45,7 +45,7 @@ cleanup() {
 trap cleanup EXIT
 
 quit_dev_app() {
-    osascript -e 'tell application id "com.miniwhisper.dev" to quit' \
+    osascript -e 'tell application id "com.faladan.dev" to quit' \
         >/dev/null 2>&1 || true
     sleep 1
     while read -r pid; do
@@ -55,12 +55,12 @@ quit_dev_app() {
 
 echo "==> Building current version (${MARKETING_VERSION}, build ${BUILD_NUMBER})..."
 SPARKLE_FEED_URL_OVERRIDE="$FEED" bash Scripts/build-app.sh debug
-bash Scripts/sign-dev-app.sh --require-developer-id "build/MiniWhisper.app"
+bash Scripts/sign-dev-app.sh --require-developer-id "build/FalaDan.app"
 
 echo "==> Installing to ${INSTALL_PATH}..."
 quit_dev_app
 rm -rf "$INSTALL_PATH"
-cp -R "build/MiniWhisper.app" "$INSTALL_PATH"
+cp -R "build/FalaDan.app" "$INSTALL_PATH"
 
 NEW_MARKETING="${MARKETING_VERSION%.*}.$((${MARKETING_VERSION##*.} + 1))"
 NEW_BUILD=$((BUILD_NUMBER + 1))
@@ -71,12 +71,12 @@ sed -i '' \
     version.env
 SPARKLE_FEED_URL_OVERRIDE="$FEED" bash Scripts/build-app.sh debug
 cp "$VERSION_BACKUP" version.env
-bash Scripts/sign-dev-app.sh --require-developer-id "build/MiniWhisper.app"
+bash Scripts/sign-dev-app.sh --require-developer-id "build/FalaDan.app"
 
 echo "==> Generating signed appcast..."
-/usr/bin/ditto -c -k --keepParent "build/MiniWhisper.app" \
-    "$SERVE_DIR/MiniWhisper-${NEW_MARKETING}.zip"
-rm -rf "build/MiniWhisper.app"
+/usr/bin/ditto -c -k --keepParent "build/FalaDan.app" \
+    "$SERVE_DIR/FalaDan-${NEW_MARKETING}.zip"
+rm -rf "build/FalaDan.app"
 generate_appcast \
     --download-url-prefix "http://localhost:${PORT}/" \
     --link "$FEED" \
@@ -90,13 +90,13 @@ SERVER_PID=$!
 # The debug-only UpdateSimulator shadows the real updater when its defaults
 # key is set; a leftover key from a simulator session would silently turn
 # this whole test into a simulation.
-defaults delete com.miniwhisper.dev "UpdateSimulatorScenario" 2>/dev/null || true
+defaults delete com.faladan.dev "UpdateSimulatorScenario" 2>/dev/null || true
 
 open "$INSTALL_PATH"
 
 cat <<INSTRUCTIONS
 
-Running: MiniWhisper Dev ${MARKETING_VERSION} (build ${BUILD_NUMBER})
+Running: FalaDan Dev ${MARKETING_VERSION} (build ${BUILD_NUMBER})
 Update:  ${NEW_MARKETING} (build ${NEW_BUILD}) served at ${FEED}
 
 Try it:

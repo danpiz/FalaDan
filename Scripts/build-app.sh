@@ -4,23 +4,23 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/version.env"
 
-APP_NAME="MiniWhisper"
-CLI_NAME="miniwhispercli"
+APP_NAME="FalaDan"
+CLI_NAME="faladancli"
 BUILD_CONFIG="${1:-release}"
 BUILD_DIR=".build/${BUILD_CONFIG}"
 APP_BUNDLE="build/${APP_NAME}.app"
-BUNDLE_ID_DEBUG="com.miniwhisper.dev"
-BUNDLE_ID_RELEASE="com.miniwhisper.app"
+BUNDLE_ID_DEBUG="com.faladan.dev"
+BUNDLE_ID_RELEASE="com.faladan.app"
 
 if [[ "$BUILD_CONFIG" == "debug" ]]; then
     BUNDLE_ID="$BUNDLE_ID_DEBUG"
-    DISPLAY_NAME="MiniWhisper Dev"
+    DISPLAY_NAME="FalaDan Dev"
     FEED_URL=""
     AUTO_CHECKS=false
 else
     BUNDLE_ID="$BUNDLE_ID_RELEASE"
-    DISPLAY_NAME="MiniWhisper"
-    FEED_URL="https://raw.githubusercontent.com/andyhtran/MiniWhisper/main/appcast.xml"
+    DISPLAY_NAME="FalaDan"
+    FEED_URL="https://raw.githubusercontent.com/andyhtran/FalaDan/main/appcast.xml"
     AUTO_CHECKS=true
 fi
 
@@ -133,7 +133,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 Andy Tran. All rights reserved.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>MiniWhisper needs microphone access to record and transcribe speech.</string>
+    <string>FalaDan needs microphone access to record and transcribe speech.</string>
     <key>SUFeedURL</key>
     <string>${FEED_URL}</string>
     <key>SUPublicEDKey</key>
@@ -148,12 +148,12 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 </plist>
 PLIST
 
-cp "Sources/MiniWhisper/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+cp "Sources/FalaDan/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
 # Ship Claude Code skills alongside the app so users can toggle them on
 # from Settings. See Services/ClaudeSkillManager.swift for the sync logic.
-if [ -d "Sources/MiniWhisper/Resources/skills" ]; then
-    cp -R "Sources/MiniWhisper/Resources/skills" "$APP_BUNDLE/Contents/Resources/"
+if [ -d "Sources/FalaDan/Resources/skills" ]; then
+    cp -R "Sources/FalaDan/Resources/skills" "$APP_BUNDLE/Contents/Resources/"
 fi
 
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
@@ -161,6 +161,6 @@ echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
 # Copy entitlements (used by signing in justfile, not embedded in bundle)
-cp "Sources/MiniWhisper/Resources/MiniWhisper.entitlements" "build/"
+cp "Sources/FalaDan/Resources/FalaDan.entitlements" "build/"
 
 echo "Bundle created: $APP_BUNDLE"
