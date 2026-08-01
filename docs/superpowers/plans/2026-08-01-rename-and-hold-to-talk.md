@@ -51,17 +51,26 @@ git mv Sources/FalaDanCLI/MiniWhisperCLI.swift Sources/FalaDanCLI/FalaDanCLI.swi
 
 - [ ] **Step 2: Rewrite the identifiers, scoped to code and build files only**
 
+Four case variants exist in this codebase, and all four must be covered: `MiniWhisper`, `miniwhisper`, `MINIWHISPER_` (env var names in `Scripts/sign-dev-app.sh` and `SkillsCommand.swift`), and `miniWhisper` (camelCase identifiers in `FalaDanCLI/Paths.swift`).
+
 Order matters: the lowercase `miniwhisper` rule must run before the capitalised one would otherwise mangle `com.miniwhisper`.
 
 ```bash
-FILES=$(git ls-files Sources Tests Scripts Package.swift justfile)
-sed -i '' \
-  -e 's/com\.miniwhisper/com.faladan/g' \
-  -e 's/miniwhispercli/faladancli/g' \
-  -e 's/MiniWhisper/FalaDan/g' \
-  -e 's/miniwhisper/faladan/g' \
-  $FILES
+git ls-files Sources Tests Scripts Package.swift justfile \
+  | grep -v '\.icns$' \
+  | xargs sed -i '' \
+    -e 's/com\.miniwhisper/com.faladan/g' \
+    -e 's/miniwhispercli/faladancli/g' \
+    -e 's/MiniWhisper/FalaDan/g' \
+    -e 's/miniwhisper/faladan/g' \
+    -e 's/MINIWHISPER/FALADAN/g' \
+    -e 's/miniWhisper/falaDan/g'
 ```
+
+Two details that will bite otherwise:
+
+- **Pipe to `xargs`; do not use `FILES=$(...)` and pass `$FILES` unquoted.** The default shell here is zsh, which does not word-split unquoted variables the way bash does — the sed silently does nothing.
+- **Exclude `AppIcon.icns`.** BSD sed fails on binary input with "illegal byte sequence" and leaves a stray zero-byte `.!<pid>!AppIcon.icns` artifact behind, which a later `git add -A` will happily commit.
 
 - [ ] **Step 3: Restore the whisper.xcframework download URL**
 
@@ -119,7 +128,9 @@ No behavior change; all 146 tests green."
 
 **Done means:** `./Scripts/verify.sh --dirty` passes with 146 tests, `grep -in miniwhisper` over `Sources Tests Scripts justfile` returns nothing, `Package.swift` still points the binary target at `andyhtran/MiniWhisper`, and `docs/`, `CLAUDE.md`, `LICENSE`, and `README.md` are byte-for-byte unchanged (`git diff --name-only` confirms).
 
-**Known and accepted:** `.github/workflows/ci.yml`, `appcast.xml`, `ReleaseNotes/`, and `Scripts/update-tap.sh` still reference MiniWhisper. CI and the release tooling are deleted in Phase 5; leaving them stale now avoids widening a mechanical rename into a packaging change.
+**Known and accepted:** `.github/workflows/ci.yml`, `appcast.xml`, and `ReleaseNotes/` still reference MiniWhisper — they fall outside Step 2's scope. CI and the release tooling are deleted in Phase 5; leaving them stale now avoids widening a mechanical rename into a packaging change.
+
+`Scripts/` *is* in scope and is renamed, including `update-tap.sh` — those are our own scripts, not external addresses. One consequence to note: `build-app.sh`'s `SUFeedURL` and `make-appcast.sh`'s feed URLs now point at `github.com/andyhtran/FalaDan`, which does not exist. That is moot once Phase 5 deletes Sparkle; if Sparkle is ever kept instead, they must become `danpiz/FalaDan`.
 
 ---
 
