@@ -4,7 +4,8 @@ import AppKit
 
 @MainActor
 protocol HotkeyManagerDelegate: AnyObject {
-    nonisolated func hotkeyDidToggleRecording()
+    nonisolated func hotkeyDidStartRecording()
+    nonisolated func hotkeyDidStopRecording()
     nonisolated func hotkeyDidCancelRecording()
     nonisolated func hotkeyDidToggleAutoCleanupRecording()
     nonisolated func hotkeyDidEditSelection()
@@ -22,7 +23,7 @@ final class HotkeyManager {
     let recordingActiveLock = NSLock()
 
     func start() {
-        setupToggleRecording()
+        setupHoldToTalkRecording()
         setupCancelRecording()
         setupAutoCleanupRecording()
         setupEditSelection()
@@ -55,9 +56,20 @@ final class HotkeyManager {
         shortcutMonitor.refresh()
     }
 
-    private func setupToggleRecording() {
+    /// Hold-to-talk: the press starts recording and the release ends it.
+    ///
+    /// Both edges come from machinery that already exists — Carbon reports
+    /// `.pressed`/`.released` for chords, and the modifier tap reports both for a
+    /// bare Fn. The release is what makes this hold-to-talk rather than a toggle,
+    /// so it must never be dropped: `CustomShortcutMonitor` guarantees a keyUp for
+    /// every accepted keyDown, including presses stranded by a registration
+    /// teardown, which is exactly why recording cannot be left running.
+    private func setupHoldToTalkRecording() {
         shortcutMonitor.onKeyDown(for: .toggleRecording) { [weak self] in
-            self?.delegate?.hotkeyDidToggleRecording()
+            self?.delegate?.hotkeyDidStartRecording()
+        }
+        shortcutMonitor.onKeyUp(for: .toggleRecording) { [weak self] in
+            self?.delegate?.hotkeyDidStopRecording()
         }
     }
 

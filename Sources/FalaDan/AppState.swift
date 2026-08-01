@@ -158,6 +158,14 @@ final class AppState: Sendable {
 
     // MARK: - Recording
 
+    /// When the current hold-to-talk press began, for the minimum-hold check on
+    /// release. Uses the monotonic uptime clock rather than wall time so an NTP
+    /// step mid-hold cannot turn a brushed key into a "long" hold.
+    private var holdToTalkStartedAt: TimeInterval?
+
+    /// Kept for the menu bar and any UI affordance that starts a recording
+    /// without a key to hold. The hotkey path is `beginHoldToTalk` /
+    /// `endHoldToTalk` and no longer routes through here.
     func toggleRecording() {
         // Edit-mode recording uses the same recorder. Don't let the normal
         // toggle shortcut hijack it — the user has to press the edit
@@ -169,6 +177,46 @@ final class AppState: Sendable {
         } else {
             cleanupRequestedForCurrentRecording = false
             startRecording()
+        }
+    }
+
+    /// Hotkey pressed. Starts recording immediately — latency here is felt
+    /// directly as clipped first syllables.
+    func beginHoldToTalk() {
+        if editModeContext != nil { return }
+        guard !recorder.state.isRecording else { return }
+
+        holdToTalkStartedAt = ProcessInfo.processInfo.systemUptime
+        cleanupRequestedForCurrentRecording = false
+        startRecording()
+    }
+
+    /// Hotkey released. Transcribes a real hold; discards a brushed key.
+    ///
+    /// Discarding routes through `cancelRecording()` rather than
+    /// `stopAndTranscribe()` so no API call is made and nothing is pasted.
+    func endHoldToTalk() {
+        if editModeContext != nil { return }
+
+        let startedAt = holdToTalkStartedAt
+        holdToTalkStartedAt = nil
+
+        guard recorder.state.isRecording else { return }
+
+        // No recorded start means the press was never seen — a release stranded
+        // by a registration teardown, or a key-up delivered after a stuck-down
+        // recovery. Transcribe rather than discard: the user did speak, and
+        // silently dropping speech is the worse failure.
+        guard let startedAt else {
+            stopAndTranscribe()
+            return
+        }
+
+        let held = ProcessInfo.processInfo.systemUptime - startedAt
+        if HoldToTalkPolicy.shouldTranscribe(heldFor: held) {
+            stopAndTranscribe()
+        } else {
+            cancelRecording()
         }
     }
 

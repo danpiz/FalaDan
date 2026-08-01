@@ -385,9 +385,15 @@ final class HotkeyDelegateImpl: HotkeyManagerDelegate {
         self.appState = appState
     }
 
-    nonisolated func hotkeyDidToggleRecording() {
+    nonisolated func hotkeyDidStartRecording() {
         Task { @MainActor in
-            self.appState?.toggleRecording()
+            self.appState?.beginHoldToTalk()
+        }
+    }
+
+    nonisolated func hotkeyDidStopRecording() {
+        Task { @MainActor in
+            self.appState?.endHoldToTalk()
         }
     }
 
