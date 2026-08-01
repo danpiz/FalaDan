@@ -60,7 +60,7 @@ Cost accepted: dead code is carried for the duration of the rewire phase.
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Default hotkey | **Right Option** | Sidesteps Fn's OS quirks (swallowed events, dropped key-up on sleep/wake) entirely. Fn remains available via the custom-shortcut path. |
+| Default hotkey | **Fn** | Reversed from an earlier Right Option decision after reading the hotkey layer. See 5.2 — the bare-modifier tap is Fn-only by design, so Right Option would mean building a generalized modifier mechanism inside the event tap before hold-to-talk could ship at all. Fn's OS quirks are already solved and unit-tested here. |
 | Recording indicator | **Static pill, v1** | Matches the PRD's "tiny" framing. Live level meter deferred to v2 — cheap, since metering exists. |
 | Local model delivery | **Download on first run** | Reuses MiniWhisper's checksum-verified download unchanged. Zero new work. |
 | Parakeet | **Keep, selectable** | Faster and more accurate than whisper-small on English. Worth A/B-ing on Dan's own voice. |
@@ -86,26 +86,37 @@ entitlements filename, and `Scripts/`. One commit, no behavior change.
 
 ### 5.2 Hold-to-talk
 
-Today `FnStateMachine` emits only `.fnKeyUp`, and deliberately ignores hold duration
-("press-and-hold-then-release toggles the same as a quick tap"). The consumer calls
-`toggleRecording()`.
+**The delivery plumbing already exists.** `ShortcutHandlerRegistry` holds separate keyDown and
+keyUp handlers; `CustomShortcutMonitor` exposes `onKeyDown`/`onKeyUp`; both the Carbon backend
+(`.pressed` / `.released`) and the modifier tap already fire both edges, and
+`HotkeyManager.setupEditSelection` already uses `onKeyUp` in production. What is missing is not
+the mechanism but the wiring: `setupToggleRecording` registers **only** a keyDown handler,
+which calls `toggleRecording()`.
 
-Changes:
+The change is therefore small:
 
-- `FnStateMachine` exposes a **down-edge event** alongside the existing up-edge.
-- The consumer maps down → `startRecording()`, up → `stopRecording()`.
-- Right Option becomes the default binding via the existing `ModifierTapMonitor`
-  bare-modifier path.
-- A new **hold-duration policy** unit decides whether an up-edge completes or discards the
-  recording, based on elapsed time against the configured threshold. Pure function, no
-  dependencies, unit-testable in isolation.
+- `HotkeyManager` registers **both** edges for the recording shortcut, delegating
+  `hotkeyDidStartRecording()` on down and `hotkeyDidStopRecording()` on up.
+- `AppState` gains hold-to-talk entry points that start on down and stop-and-transcribe on up,
+  replacing `toggleRecording()` on this path.
+- A new **hold-duration policy** — a pure value type, no dependencies — decides whether an
+  up-edge transcribes or discards, comparing elapsed time against the configured threshold.
 
-The existing stuck-down recovery (macOS dropping key-up on sleep/wake) is preserved — it
-matters *more* under hold-to-talk, since a dropped key-up now means a recording that never
-stops.
+**Fn stays the bare-modifier key.** The tap is Fn-only by design: `ShortcutBackend.classify`
+returns `.modifierOnly` only for `shortcut.isFnOnly`, and any other bare modifier is
+`.unsupported(.modifierChord)` ("the modifier tap only tracks Fn on its own").
+`CustomShortcutMonitor.handleModifierEvent` hard-guards on `FnKeyCode.isFnKey`. Supporting a
+different bare modifier would mean generalizing `FnStateMachine`, `ShortcutMatcher`,
+`ShortcutBackend`, and `CustomShortcutMonitor` — all inside the event tap — before hold-to-talk
+could ship. Not worth it: Fn's quirks are already handled and tested here.
 
-Touches: `Services/Hotkeys/FnStateMachine.swift`, `ModifierTapMonitor.swift`,
-`ShortcutHandlerRegistry.swift`, `AppDelegate.swift`, `Features/Recording/AppState+RecordingFlow.swift`.
+`FnStateMachine`'s stuck-down recovery is preserved and matters *more* under hold-to-talk, since
+a dropped key-up now means a recording that never stops. Its comment that hold duration is
+"deliberately irrelevant" is no longer true of the system and must be updated.
+
+Touches: `Services/Hotkeys/HotkeyManager.swift`, `AppDelegate.swift`, `AppState.swift`,
+plus a new hold-duration policy file. `FnStateMachine` and `CustomShortcutMonitor` are
+**not** modified.
 
 ### 5.3 Config
 
