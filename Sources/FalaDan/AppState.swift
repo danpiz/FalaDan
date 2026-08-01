@@ -163,6 +163,16 @@ final class AppState: Sendable {
     /// step mid-hold cannot turn a brushed key into a "long" hold.
     private var holdToTalkStartedAt: TimeInterval?
 
+    /// A release that arrived before the recorder was live, waiting to be
+    /// applied the moment it is.
+    ///
+    /// The recorder only reports `.recording` after an async CoreAudio device
+    /// open, which can take longer than the hold itself — so acting on observed
+    /// recorder state would drop the release entirely and leave the microphone
+    /// running with nothing left to stop it. Recording the *intent* instead
+    /// makes the decision independent of how long the hardware took.
+    private var pendingHoldRelease: HoldToTalkPolicy.Release?
+
     /// Kept for the menu bar and any UI affordance that starts a recording
     /// without a key to hold. The hotkey path is `beginHoldToTalk` /
     /// `endHoldToTalk` and no longer routes through here.
@@ -184,6 +194,11 @@ final class AppState: Sendable {
     /// directly as clipped first syllables.
     func beginHoldToTalk() {
         if editModeContext != nil { return }
+
+        // Any release still waiting belongs to a press that is over. Clearing it
+        // here stops a stale intent from cutting this recording short.
+        pendingHoldRelease = nil
+
         guard !recorder.state.isRecording else { return }
 
         holdToTalkStartedAt = ProcessInfo.processInfo.systemUptime
@@ -195,29 +210,54 @@ final class AppState: Sendable {
     ///
     /// Discarding routes through `cancelRecording()` rather than
     /// `stopAndTranscribe()` so no API call is made and nothing is pasted.
+    ///
+    /// The recorder may not be live yet — a hold shorter than the CoreAudio
+    /// device open resolves here first. In that case the decision is parked and
+    /// `startRecordingFlow` applies it as soon as the recorder comes up, so a
+    /// brushed key cannot leave a microphone running.
     func endHoldToTalk() {
-        if editModeContext != nil { return }
-
+        // Cleared before the edit-mode guard so a stale timestamp cannot leak
+        // into an unrelated later hold.
         let startedAt = holdToTalkStartedAt
         holdToTalkStartedAt = nil
 
-        guard recorder.state.isRecording else { return }
+        if editModeContext != nil { return }
 
-        // No recorded start means the press was never seen — a release stranded
-        // by a registration teardown, or a key-up delivered after a stuck-down
-        // recovery. Transcribe rather than discard: the user did speak, and
-        // silently dropping speech is the worse failure.
-        guard let startedAt else {
-            stopAndTranscribe()
+        let held = startedAt.map { ProcessInfo.processInfo.systemUptime - $0 }
+        let decision = HoldToTalkPolicy.release(heldFor: held)
+
+        guard recorder.state.isRecording else {
+            pendingHoldRelease = decision
             return
         }
 
-        let held = ProcessInfo.processInfo.systemUptime - startedAt
-        if HoldToTalkPolicy.shouldTranscribe(heldFor: held) {
-            stopAndTranscribe()
-        } else {
-            cancelRecording()
+        apply(decision)
+    }
+
+    /// Runs a release decision against a live recorder.
+    func apply(_ decision: HoldToTalkPolicy.Release) {
+        switch decision {
+        case .transcribe: stopAndTranscribe()
+        case .discard: cancelRecording()
         }
+    }
+
+    /// Applies a release that arrived before the recorder was live, if one did.
+    ///
+    /// Called by `startRecordingFlow` once the recorder is up. Returns whether a
+    /// pending release was consumed.
+    @discardableResult
+    func applyPendingHoldRelease() -> Bool {
+        guard let decision = pendingHoldRelease else { return false }
+        pendingHoldRelease = nil
+        apply(decision)
+        return true
+    }
+
+    /// Drops a parked release without acting on it, for when the recording it
+    /// was waiting for never came up.
+    func clearPendingHoldRelease() {
+        pendingHoldRelease = nil
     }
 
     /// Auto-cleanup recording shortcut: starts/stops a normal recording

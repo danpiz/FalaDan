@@ -55,11 +55,18 @@ extension AppState {
             try await recorder.startRecording(to: audioURL, resolvedDevice: resolvedDevice)
             startDurationChecks()
             onRecordingStarted?()
+            // The hotkey may already have been released while the device was
+            // opening. Apply that decision now, or the microphone stays live
+            // with no release left to stop it.
+            applyPendingHoldRelease()
         } catch {
             recordingStore.discard(id: recordingId)
             toast.showError(title: "Recording Failed", message: error.localizedDescription)
             recorder.reset()
             currentRecordingId = nil
+            // The recording never came up, so a parked release has nothing to
+            // act on. Drop it rather than let it fire against the next one.
+            clearPendingHoldRelease()
         }
     }
 
@@ -77,11 +84,18 @@ extension AppState {
         let sampleRate = recorder.actualSampleRate
         let inputDeviceName = recorder.actualInputDeviceName
 
-        // Sub-1s clips are nearly always an accidental toggle double-tap,
-        // and whisper tends to hallucinate filler on them. Edit mode uses a
-        // looser 0.5s threshold because it starts deliberately (a selection
-        // must exist first), so accidental triggers are rare there.
-        guard duration >= 1.0 else {
+        // Whisper hallucinates filler on very short clips, so there is still a
+        // floor — but it is now a hardware floor, not an intent one.
+        //
+        // This guard used to be 1.0s, on the reasoning that a sub-second clip
+        // was "nearly always an accidental toggle double-tap". Hold-to-talk
+        // removed that failure mode: an accidental press is now caught at the
+        // release by HoldToTalkPolicy's minimum-hold check, before any recording
+        // is kept. Leaving the floor at 1.0s would have made that check
+        // decorative — every hold between 0.15s and 1.0s passed the policy and
+        // then died here with an error toast, so a deliberate short word
+        // ("yes", "undo") could not be dictated at all.
+        guard duration >= 0.3 else {
             let recordingId = currentRecordingId
             await recorder.cancelRecording()
             recorder.reset()

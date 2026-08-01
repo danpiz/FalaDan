@@ -25,4 +25,27 @@ enum HoldToTalkPolicy {
         guard heldFor >= 0 else { return false }
         return heldFor >= minimum
     }
+
+    /// What a released hold should do with the recording it started.
+    enum Release: Equatable {
+        case transcribe
+        case discard
+    }
+
+    /// The whole release decision, as a pure function so it can be tested
+    /// without a recorder, an event tap, or a microphone.
+    ///
+    /// - Parameter heldFor: seconds the key was held, or `nil` when the press
+    ///   was never observed — a release stranded by a registration teardown, or
+    ///   one delivered after `FnStateMachine`'s stuck-down recovery. That case
+    ///   transcribes rather than discards: the two failures are not symmetric,
+    ///   and silently dropping speech the user actually said is far worse than
+    ///   an unwanted paste they can undo.
+    static func release(
+        heldFor: TimeInterval?,
+        minimum: TimeInterval = defaultMinimumHold
+    ) -> Release {
+        guard let heldFor else { return .transcribe }
+        return shouldTranscribe(heldFor: heldFor, minimum: minimum) ? .transcribe : .discard
+    }
 }

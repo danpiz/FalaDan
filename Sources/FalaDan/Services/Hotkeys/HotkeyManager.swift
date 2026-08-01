@@ -60,10 +60,22 @@ final class HotkeyManager {
     ///
     /// Both edges come from machinery that already exists — Carbon reports
     /// `.pressed`/`.released` for chords, and the modifier tap reports both for a
-    /// bare Fn. The release is what makes this hold-to-talk rather than a toggle,
-    /// so it must never be dropped: `CustomShortcutMonitor` guarantees a keyUp for
-    /// every accepted keyDown, including presses stranded by a registration
-    /// teardown, which is exactly why recording cannot be left running.
+    /// bare Fn.
+    ///
+    /// `CustomShortcutMonitor` completes a press whose registration is torn down
+    /// mid-hold, and `FnStateMachine` recovers a dropped Fn keyUp — but only on
+    /// the *next* Fn press past its stuck-down threshold. So delivery is best
+    /// effort, not a guarantee, and `AppState` does not rely on it: the release
+    /// decision is parked as intent rather than applied against observed recorder
+    /// state, so a release arriving before the audio device is open still stops
+    /// the recording.
+    ///
+    /// One coupling worth knowing: `recordingDidStart()` calls
+    /// `shortcutMonitor.refresh()` while this shortcut is physically held, which
+    /// was harmless when `.toggleRecording` had no keyUp handler. It stays safe
+    /// only because `.toggleRecording` has no enabled check, so `refresh()` never
+    /// unregisters it. Adding one would make `releaseStrandedPresses` fire the
+    /// release milliseconds after the press.
     private func setupHoldToTalkRecording() {
         shortcutMonitor.onKeyDown(for: .toggleRecording) { [weak self] in
             self?.delegate?.hotkeyDidStartRecording()

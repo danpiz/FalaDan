@@ -39,3 +39,33 @@ struct HoldToTalkPolicyTests {
         #expect(HoldToTalkPolicy.defaultMinimumHold == 0.15)
     }
 }
+
+/// The release decision, including the case the recorder cannot answer: a
+/// release whose press was never observed.
+struct HoldToTalkReleaseTests {
+    @Test func aDeliberateHoldTranscribes() {
+        #expect(HoldToTalkPolicy.release(heldFor: 1.2, minimum: 0.15) == .transcribe)
+    }
+
+    @Test func aBrushedKeyDiscards() {
+        #expect(HoldToTalkPolicy.release(heldFor: 0.02, minimum: 0.15) == .discard)
+    }
+
+    /// An unobserved press means a stranded release or a stuck-down recovery.
+    /// Transcribing risks an unwanted paste; discarding throws away speech.
+    /// Only one of those is recoverable by the user.
+    @Test func anUnobservedPressTranscribesRatherThanDiscards() {
+        #expect(HoldToTalkPolicy.release(heldFor: nil, minimum: 0.15) == .transcribe)
+    }
+
+    /// A nil hold is not silently treated as a zero-length one — that would
+    /// invert the previous case and drop the speech.
+    @Test func anUnobservedPressIsNotTreatedAsAZeroLengthHold() {
+        #expect(HoldToTalkPolicy.release(heldFor: 0, minimum: 0.15) == .discard)
+        #expect(HoldToTalkPolicy.release(heldFor: nil, minimum: 0.15) == .transcribe)
+    }
+
+    @Test func aBackwardsClockDiscards() {
+        #expect(HoldToTalkPolicy.release(heldFor: -3, minimum: 0.15) == .discard)
+    }
+}
