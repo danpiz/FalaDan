@@ -173,6 +173,15 @@ final class AppState: Sendable {
     /// makes the decision independent of how long the hardware took.
     private var pendingHoldRelease: HoldToTalkPolicy.Release?
 
+    /// Whether a hold-to-talk start *this object initiated* is still resolving.
+    ///
+    /// Only such a start may have a release parked against it. Without this,
+    /// a release with nothing to stop — a hold pressed while the model is still
+    /// loading, or a key-up stranded by `releaseStrandedPresses` with no press
+    /// behind it — would park an intent that the next recording to start, very
+    /// possibly one begun by a different shortcut, would consume and be killed by.
+    private var holdToTalkStartInFlight = false
+
     /// Kept for the menu bar and any UI affordance that starts a recording
     /// without a key to hold. The hotkey path is `beginHoldToTalk` /
     /// `endHoldToTalk` and no longer routes through here.
@@ -199,9 +208,18 @@ final class AppState: Sendable {
         // here stops a stale intent from cutting this recording short.
         pendingHoldRelease = nil
 
-        guard !recorder.state.isRecording else { return }
+        // A start already in flight — from the auto-cleanup shortcut or the menu
+        // bar — owns both the recording and its cleanup intent. Bail before
+        // touching either. Checking `captureTransitionInFlight` as well as
+        // `isRecording` matters because the gap between them is exactly the
+        // CoreAudio device-open window: during it a recording is being started
+        // but does not yet report itself as recording, and clearing
+        // `cleanupRequestedForCurrentRecording` there would silently disable the
+        // cleanup pass on someone else's recording.
+        guard !recorder.state.isRecording, !captureTransitionInFlight else { return }
 
         holdToTalkStartedAt = ProcessInfo.processInfo.systemUptime
+        holdToTalkStartInFlight = true
         cleanupRequestedForCurrentRecording = false
         startRecording()
     }
@@ -226,16 +244,21 @@ final class AppState: Sendable {
         let held = startedAt.map { ProcessInfo.processInfo.systemUptime - $0 }
         let decision = HoldToTalkPolicy.release(heldFor: held)
 
-        guard recorder.state.isRecording else {
-            pendingHoldRelease = decision
+        if recorder.state.isRecording {
+            applyHoldRelease(decision)
             return
         }
 
-        apply(decision)
+        // Park only against a start this press actually initiated. A release
+        // with nothing to stop must evaporate here, or the next recording to
+        // start — possibly one begun by a different shortcut entirely — would
+        // consume the stale intent and be cut down immediately.
+        guard holdToTalkStartInFlight else { return }
+        pendingHoldRelease = decision
     }
 
     /// Runs a release decision against a live recorder.
-    func apply(_ decision: HoldToTalkPolicy.Release) {
+    func applyHoldRelease(_ decision: HoldToTalkPolicy.Release) {
         switch decision {
         case .transcribe: stopAndTranscribe()
         case .discard: cancelRecording()
@@ -250,13 +273,19 @@ final class AppState: Sendable {
     func applyPendingHoldRelease() -> Bool {
         guard let decision = pendingHoldRelease else { return false }
         pendingHoldRelease = nil
-        apply(decision)
+        applyHoldRelease(decision)
         return true
     }
 
-    /// Drops a parked release without acting on it, for when the recording it
-    /// was waiting for never came up.
-    func clearPendingHoldRelease() {
+    /// Ends the hold-to-talk start window, dropping any release still parked
+    /// against it.
+    ///
+    /// Called from every exit of `startRecordingFlow`, including the early
+    /// returns that never begin a recording (model still loading, no audio
+    /// device, a transition already in flight). A parked release that outlives
+    /// its start has nothing to act on and must not survive to meet the next one.
+    func endHoldToTalkStartWindow() {
+        holdToTalkStartInFlight = false
         pendingHoldRelease = nil
     }
 

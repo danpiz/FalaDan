@@ -84,7 +84,11 @@ final class AnalyticsStore: Sendable {
 
     func seedFromRecordings(_ recordings: [Recording]) {
         for recording in recordings {
-            guard recording.recording.duration >= 1.0,
+            // Must track the transcription floor in `stopAndTranscribeFlow`, or a
+            // reseed silently drops recordings that were counted when they were
+            // made. Both moved from 1.0 to 0.3 when hold-to-talk replaced
+            // press-to-toggle.
+            guard recording.recording.duration >= 0.3,
                   let transcription = recording.transcription else { continue }
 
             totals.totalRecordings += 1

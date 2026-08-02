@@ -7,7 +7,15 @@ extension AppState {
     func startRecordingFlow() async {
         guard !captureTransitionInFlight else { return }
         captureTransitionInFlight = true
-        defer { captureTransitionInFlight = false }
+        // Covers every exit below, not just the catch: this method returns early
+        // on a model that is still loading, a missing audio device, and a
+        // non-idle recorder, none of which start a recording. A hold-to-talk
+        // release parked against any of those has nothing to act on, and must
+        // not survive to be consumed by the next recording that does start.
+        defer {
+            captureTransitionInFlight = false
+            endHoldToTalkStartWindow()
+        }
 
         guard recorder.state.isIdle else { return }
         guard isModelLoaded else {
@@ -64,9 +72,6 @@ extension AppState {
             toast.showError(title: "Recording Failed", message: error.localizedDescription)
             recorder.reset()
             currentRecordingId = nil
-            // The recording never came up, so a parked release has nothing to
-            // act on. Drop it rather than let it fire against the next one.
-            clearPendingHoldRelease()
         }
     }
 
