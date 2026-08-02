@@ -204,10 +204,6 @@ final class AppState: Sendable {
     func beginHoldToTalk() {
         if editModeContext != nil { return }
 
-        // Any release still waiting belongs to a press that is over. Clearing it
-        // here stops a stale intent from cutting this recording short.
-        pendingHoldRelease = nil
-
         // A start already in flight — from the auto-cleanup shortcut or the menu
         // bar — owns both the recording and its cleanup intent. Bail before
         // touching either. Checking `captureTransitionInFlight` as well as
@@ -217,6 +213,13 @@ final class AppState: Sendable {
         // `cleanupRequestedForCurrentRecording` there would silently disable the
         // cleanup pass on someone else's recording.
         guard !recorder.state.isRecording, !captureTransitionInFlight else { return }
+
+        // Below the guard, deliberately. A press that bails above must not
+        // destroy a release parked against the start it just declined to touch:
+        // that start is still resolving and still needs its decision. Clearing
+        // it there let a fast double-brush transcribe when the first release had
+        // already said discard.
+        pendingHoldRelease = nil
 
         holdToTalkStartedAt = ProcessInfo.processInfo.systemUptime
         holdToTalkStartInFlight = true
