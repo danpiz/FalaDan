@@ -154,11 +154,6 @@ PLIST
 
 cp "Sources/FalaDan/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
-# Menu bar template glyph. Package.swift excludes Resources/ from the SPM
-# target, so anything the app loads at runtime has to be copied here by hand —
-# a missing copy shows up as a fallback SF Symbol, not a build error.
-cp "Sources/FalaDan/Resources/MenuBarIcon.png" "$APP_BUNDLE/Contents/Resources/"
-
 # Ship Claude Code skills alongside the app so users can toggle them on
 # from Settings. See Services/ClaudeSkillManager.swift for the sync logic.
 if [ -d "Sources/FalaDan/Resources/skills" ]; then

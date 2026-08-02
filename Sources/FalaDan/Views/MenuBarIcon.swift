@@ -33,40 +33,96 @@ enum MenuBarIconRenderer {
         }
     }
 
-    /// The bundled FalaDan waveform, matching the app icon's mark.
+    // Idle waveform geometry
+    private static let iconSize: CGFloat = 18
+    private static let strokeWidth: CGFloat = 1.7
+    /// Keeps the stroke's outer edge and its round caps inside the canvas.
+    /// Half the stroke would be the minimum; the rest is optical breathing room
+    /// so the glyph does not crowd the menu bar items either side.
+    private static let iconInset: CGFloat = 1.6
+
+    /// The FalaDan mark: a wave that climbs to a tall peak and trails off right.
     ///
-    /// Loaded once: `NSImage` decode is not free and the menu bar re-renders on
-    /// every state change. Falls back to the `waveform` SF Symbol if the
-    /// resource is missing, so a packaging mistake degrades to a sensible icon
-    /// rather than a blank menu bar.
+    /// Normalised to the unit square, y measured from the bottom. Read these as
+    /// the wave's turning points — the renderer rounds the corners between them
+    /// into a continuous curve.
+    private static let waveKeyPoints: [CGPoint] = [
+        CGPoint(x: 0.00, y: 0.46),
+        CGPoint(x: 0.13, y: 0.70),
+        CGPoint(x: 0.27, y: 0.30),
+        CGPoint(x: 0.45, y: 1.00),
+        CGPoint(x: 0.62, y: 0.06),
+        CGPoint(x: 0.78, y: 0.62),
+        CGPoint(x: 1.00, y: 0.44),
+    ]
+
+    /// The idle waveform, drawn rather than loaded.
+    ///
+    /// Drawn for the same reason the meter and pulse states are: a path is
+    /// resolution-independent, so it stays crisp at any menu bar size and on any
+    /// display, and there is no resource to copy into the bundle and no failure
+    /// mode where a packaging slip leaves the menu bar blank. It also sidesteps
+    /// the supplied bitmap's clipped right edge, which could not be recovered by
+    /// scaling.
+    ///
+    /// Built once — the menu bar re-renders on every state change, and this
+    /// never varies.
     private static let idleIcon: NSImage = {
-        guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
-            let image = NSImage(contentsOf: url)
-        else {
-            return renderSymbol("waveform")
+        let size = NSSize(width: iconSize, height: iconSize)
+        let image = NSImage(size: size, flipped: false) { _ in
+            let span = iconSize - iconInset * 2
+            let points = waveKeyPoints.map {
+                CGPoint(x: iconInset + $0.x * span, y: iconInset + $0.y * span)
+            }
+
+            let path = smoothPath(through: points)
+            path.lineWidth = strokeWidth
+            // Round caps and joins so the trailing tip and the peaks read as a
+            // drawn stroke rather than a chart line.
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
         }
-        // The asset is @2x. Declaring the logical size at 18pt lets AppKit use
-        // the full 36px of backing store on a Retina display instead of
-        // upscaling an 18px thumbnail.
-        image.size = NSSize(width: 18, height: 18)
-        // Template means macOS discards the colour and renders the alpha as a
-        // silhouette that inverts with the menu bar and dims when the app is
-        // inactive. Without it the glyph would stay white and vanish on a light
-        // menu bar.
+        // Template: macOS discards the colour and renders the shape as a
+        // silhouette that inverts against a light menu bar and dims when the app
+        // is inactive. Drawing in black above is arbitrary — only coverage
+        // survives.
         image.isTemplate = true
         return image
     }()
 
-    /// Render an SF Symbol as a template NSImage sized for the menu bar.
-    private static func renderSymbol(_ name: String) -> NSImage {
-        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
-        if let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) {
-            let configured = image.withSymbolConfiguration(config) ?? image
-            configured.isTemplate = true
-            return configured
+    /// A path through every point, with the corners rounded off.
+    ///
+    /// Catmull-Rom, converted to the cubic Béziers AppKit draws. Straight
+    /// segments would make the wave look like a chart; this keeps the turning
+    /// points smooth while still passing through each one exactly, so the
+    /// key points above stay readable as the shape they describe.
+    private static func smoothPath(through points: [CGPoint]) -> NSBezierPath {
+        let path = NSBezierPath()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        guard points.count > 2 else {
+            points.dropFirst().forEach { path.line(to: $0) }
+            return path
         }
-        // Fallback — should never happen with known symbol names
-        return NSImage(size: NSSize(width: 18, height: 18))
+
+        for i in 0..<(points.count - 1) {
+            // Clamp at the ends so the curve starts and finishes level instead
+            // of overshooting past the first and last points.
+            let p0 = points[max(i - 1, 0)]
+            let p1 = points[i]
+            let p2 = points[i + 1]
+            let p3 = points[min(i + 2, points.count - 1)]
+
+            // The 6.0 is Catmull-Rom's standard tension: tangents are a sixth of
+            // the span to the neighbour on either side.
+            let c1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6.0, y: p1.y + (p2.y - p0.y) / 6.0)
+            let c2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6.0, y: p2.y - (p3.y - p1.y) / 6.0)
+            path.curve(to: p2, controlPoint1: c1, controlPoint2: c2)
+        }
+        return path
     }
 
     /// Draw three rounded red bars whose height tracks the mic level.
