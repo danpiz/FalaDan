@@ -1,7 +1,7 @@
 app_name := "FalaDan"
 bundle_id := "com.faladan.dev"
 team_id := env("CODESIGN_TEAM_ID", "")
-install_path := "/Applications/FalaDan Dev.app"
+install_path := "/Applications/FalaDan.app"
 
 default:
     @just --list --unsorted
@@ -100,7 +100,6 @@ test-update:
 [group('dev')]
 kill:
     -pkill -f "{{app_name}}" 2>/dev/null || true
-    -pkill -f "FalaDan Dev" 2>/dev/null || true
 
 # Reset TCC permissions (use when permissions get stuck)
 [group('dev')]
@@ -114,6 +113,5 @@ reset-tcc:
 [group('dev')]
 reset-settings:
     -killall "{{app_name}}" 2>/dev/null || true
-    -killall "FalaDan Dev" 2>/dev/null || true
     defaults delete {{bundle_id}} 2>/dev/null || true
     @echo "Settings reset. Restart the app to use defaults."

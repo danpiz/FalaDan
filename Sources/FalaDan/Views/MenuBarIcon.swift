@@ -29,9 +29,33 @@ enum MenuBarIconRenderer {
         case .processing:
             return renderPulsingBars(phase: processingPhase, color: .systemOrange)
         default:
-            return renderSymbol("waveform")
+            return idleIcon
         }
     }
+
+    /// The bundled FalaDan waveform, matching the app icon's mark.
+    ///
+    /// Loaded once: `NSImage` decode is not free and the menu bar re-renders on
+    /// every state change. Falls back to the `waveform` SF Symbol if the
+    /// resource is missing, so a packaging mistake degrades to a sensible icon
+    /// rather than a blank menu bar.
+    private static let idleIcon: NSImage = {
+        guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
+            let image = NSImage(contentsOf: url)
+        else {
+            return renderSymbol("waveform")
+        }
+        // The asset is @2x. Declaring the logical size at 18pt lets AppKit use
+        // the full 36px of backing store on a Retina display instead of
+        // upscaling an 18px thumbnail.
+        image.size = NSSize(width: 18, height: 18)
+        // Template means macOS discards the colour and renders the alpha as a
+        // silhouette that inverts with the menu bar and dims when the app is
+        // inactive. Without it the glyph would stay white and vanish on a light
+        // menu bar.
+        image.isTemplate = true
+        return image
+    }()
 
     /// Render an SF Symbol as a template NSImage sized for the menu bar.
     private static func renderSymbol(_ name: String) -> NSImage {

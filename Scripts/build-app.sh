@@ -14,7 +14,11 @@ BUNDLE_ID_RELEASE="com.faladan.app"
 
 if [[ "$BUILD_CONFIG" == "debug" ]]; then
     BUNDLE_ID="$BUNDLE_ID_DEBUG"
-    DISPLAY_NAME="FalaDan Dev"
+    # Same display name as release. Upstream suffixed debug builds with "Dev" to
+    # tell two installed copies apart; FalaDan only ever installs the local
+    # build, and the bundle IDs already differ, so the suffix was only ever
+    # visible clutter in the menu bar and /Applications.
+    DISPLAY_NAME="FalaDan"
     FEED_URL=""
     AUTO_CHECKS=false
 else
@@ -149,6 +153,11 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << PLIST
 PLIST
 
 cp "Sources/FalaDan/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
+
+# Menu bar template glyph. Package.swift excludes Resources/ from the SPM
+# target, so anything the app loads at runtime has to be copied here by hand —
+# a missing copy shows up as a fallback SF Symbol, not a build error.
+cp "Sources/FalaDan/Resources/MenuBarIcon.png" "$APP_BUNDLE/Contents/Resources/"
 
 # Ship Claude Code skills alongside the app so users can toggle them on
 # from Settings. See Services/ClaudeSkillManager.swift for the sync logic.
