@@ -77,8 +77,11 @@ final class FnStateMachine: @unchecked Sendable {
             return .usedAsModifier
         }
 
-        // Hold duration is deliberately irrelevant: press-and-hold-then-
-        // release toggles the same as a quick tap.
+        // This machine still reports only that a release happened, not how long
+        // the key was held — timing is measured further up, in `AppState`, where
+        // hold-to-talk compares it against the minimum-hold threshold. (Under the
+        // old toggle semantics duration was irrelevant to anyone; it no longer is,
+        // but the tap is still not the place to judge it.)
         return .fnKeyUp
     }
 

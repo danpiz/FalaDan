@@ -194,6 +194,38 @@ extension AppState {
         try? recordingStore.saveFailedRecording(recording)
     }
 
+    /// Throws away a recording the user never meant to make, leaving no trace.
+    ///
+    /// Distinct from `cancelRecordingFlow`, which serves a deliberate Esc press:
+    /// that keeps the audio and writes a `.cancelled` row so the recording stays
+    /// visible in history and can be re-transcribed. Neither is wanted here.
+    /// A sub-threshold hold and an Fn press that turned out to be a modifier are
+    /// both cases where the user did not ask for a recording at all, and Fn in
+    /// particular gets pressed constantly for reasons having nothing to do with
+    /// dictation — so leaving a history row per brush would bury real recordings
+    /// and churn the store's 500-entry cap.
+    func discardRecordingFlow() async {
+        guard !captureTransitionInFlight else { return }
+        captureTransitionInFlight = true
+        defer { captureTransitionInFlight = false }
+
+        guard recorder.state.isRecording else { return }
+
+        cleanupRequestedForCurrentRecording = false
+        stopDurationChecks()
+        onRecordingEnded?()
+
+        let recordingId = currentRecordingId
+        currentRecordingId = nil
+
+        await recorder.cancelRecording()
+        recorder.reset()
+
+        if let recordingId {
+            recordingStore.discard(id: recordingId)
+        }
+    }
+
     func cancelRecordingFlow() async {
         guard !captureTransitionInFlight else { return }
         captureTransitionInFlight = true

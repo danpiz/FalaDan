@@ -83,6 +83,18 @@ final class CustomShortcutMonitor: @unchecked Sendable {
         handlerRegistry.setKeyUpHandler(for: name, handler: handler)
     }
 
+    /// Fires instead of the key-up handler when the press is retired because the
+    /// key was used as a modifier rather than released as a shortcut.
+    ///
+    /// Both cases previously ran the same key-up handler, which is fine for an
+    /// action that only needs winding down but wrong for one whose key-up *is*
+    /// the action. Hold-to-talk is the latter: Fn+← would otherwise transcribe
+    /// and paste whatever the microphone happened to catch.
+    @MainActor
+    func onAbort(for name: CustomShortcutName, handler: @escaping ShortcutHandler) {
+        handlerRegistry.setAbortHandler(for: name, handler: handler)
+    }
+
     @MainActor
     func setEnabledCheck(for name: CustomShortcutName, check: @escaping ShortcutEnabledCheck) {
         handlerRegistry.setEnabledCheck(for: name, check: check)
@@ -224,7 +236,7 @@ final class CustomShortcutMonitor: @unchecked Sendable {
             // The key-down observer normally gets here first; this still matters
             // when the observer has no tap (Accessibility not granted).
             if fnStateMachine.isFnKeyDown, let cancelled = fnStateMachine.markUsedAsModifier() {
-                fireRelease(for: cancelled)
+                fireAbort(for: cancelled)
             }
 
             pressLock.lock()
@@ -253,6 +265,24 @@ final class CustomShortcutMonitor: @unchecked Sendable {
         guard wasPressed else { return false }
 
         dispatchToMain(handlerRegistry.getKeyUpHandler(for: name))
+        return true
+    }
+
+    /// Completes a press that was retired, not released: the key was a modifier
+    /// for another chord all along.
+    ///
+    /// Identical bookkeeping to `fireRelease` — the tracker must be cleared
+    /// either way, or the shortcut can never fire again — but it runs the abort
+    /// handler, which falls back to the key-up handler for any shortcut that
+    /// does not distinguish the two.
+    @discardableResult
+    private func fireAbort(for name: CustomShortcutName) -> Bool {
+        pressLock.lock()
+        let wasPressed = pressTracker.release(name)
+        pressLock.unlock()
+        guard wasPressed else { return false }
+
+        dispatchToMain(handlerRegistry.getAbortHandler(for: name))
         return true
     }
 
@@ -354,6 +384,6 @@ final class CustomShortcutMonitor: @unchecked Sendable {
         keyDownObserver.setActive(false)
 
         guard let retired = fnStateMachine.markUsedAsModifier() else { return }
-        fireRelease(for: retired)
+        fireAbort(for: retired)
     }
 }

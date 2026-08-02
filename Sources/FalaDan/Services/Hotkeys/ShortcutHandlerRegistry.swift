@@ -6,6 +6,7 @@ final class ShortcutHandlerRegistry: @unchecked Sendable {
 
     private var keyDownHandlers: [CustomShortcutName: ShortcutHandler] = [:]
     private var keyUpHandlers: [CustomShortcutName: ShortcutHandler] = [:]
+    private var abortHandlers: [CustomShortcutName: ShortcutHandler] = [:]
     private var enabledChecks: [CustomShortcutName: ShortcutEnabledCheck] = [:]
     private let lock = NSLock()
 
@@ -18,6 +19,17 @@ final class ShortcutHandlerRegistry: @unchecked Sendable {
     func setKeyUpHandler(for name: CustomShortcutName, handler: @escaping ShortcutHandler) {
         lock.lock()
         keyUpHandlers[name] = handler
+        lock.unlock()
+    }
+
+    /// Runs instead of the key-up handler when a press is retired rather than
+    /// released — the key turned out to be a modifier for another chord.
+    ///
+    /// Optional: a shortcut that registers none keeps the old behavior of
+    /// receiving its key-up handler for both cases.
+    func setAbortHandler(for name: CustomShortcutName, handler: @escaping ShortcutHandler) {
+        lock.lock()
+        abortHandlers[name] = handler
         lock.unlock()
     }
 
@@ -37,6 +49,13 @@ final class ShortcutHandlerRegistry: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return keyUpHandlers[name]
+    }
+
+    /// The abort handler if one is registered, otherwise the key-up handler.
+    func getAbortHandler(for name: CustomShortcutName) -> ShortcutHandler? {
+        lock.lock()
+        defer { lock.unlock() }
+        return abortHandlers[name] ?? keyUpHandlers[name]
     }
 
     func isEnabled(name: CustomShortcutName) -> Bool {

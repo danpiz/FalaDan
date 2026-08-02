@@ -204,8 +204,9 @@ final class AppState: Sendable {
     func beginHoldToTalk() {
         if editModeContext != nil { return }
 
-        // A start already in flight — from the auto-cleanup shortcut or the menu
-        // bar — owns both the recording and its cleanup intent. Bail before
+        // A start already in flight — from the auto-cleanup shortcut, or from
+        // `toggleRecording()` if a UI affordance ever calls it again — owns both
+        // the recording and its cleanup intent. Bail before
         // touching either. Checking `captureTransitionInFlight` as well as
         // `isRecording` matters because the gap between them is exactly the
         // CoreAudio device-open window: during it a recording is being started
@@ -261,11 +262,41 @@ final class AppState: Sendable {
     }
 
     /// Runs a release decision against a live recorder.
+    ///
+    /// Discarding goes to `discardRecording()`, not `cancelRecording()`: the user
+    /// never asked for this recording, so it should leave no history row and no
+    /// audio file behind. Esc keeps its own flow, which preserves both.
     func applyHoldRelease(_ decision: HoldToTalkPolicy.Release) {
         switch decision {
         case .transcribe: stopAndTranscribe()
-        case .discard: cancelRecording()
+        case .discard: discardRecording()
         }
+    }
+
+    func discardRecording() {
+        Task { await discardRecordingFlow() }
+    }
+
+    /// The hotkey turned out to be a modifier for another chord — Fn+← and the
+    /// like — not a dictation press.
+    ///
+    /// Discards unconditionally, with no elapsed-time check: however long Fn was
+    /// held, the user was navigating, not talking. Without this the hold clears
+    /// the minimum-hold threshold on any deliberate pause before the chord, and
+    /// ambient room audio gets transcribed and pasted into the very app being
+    /// navigated.
+    func abortHoldToTalk() {
+        holdToTalkStartedAt = nil
+
+        if editModeContext != nil { return }
+
+        if recorder.state.isRecording {
+            applyHoldRelease(.discard)
+            return
+        }
+
+        guard holdToTalkStartInFlight else { return }
+        pendingHoldRelease = .discard
     }
 
     /// Applies a release that arrived before the recorder was live, if one did.
@@ -283,10 +314,19 @@ final class AppState: Sendable {
     /// Ends the hold-to-talk start window, dropping any release still parked
     /// against it.
     ///
-    /// Called from every exit of `startRecordingFlow`, including the early
-    /// returns that never begin a recording (model still loading, no audio
-    /// device, a transition already in flight). A parked release that outlives
-    /// its start has nothing to act on and must not survive to meet the next one.
+    /// Called from `startRecordingFlow`'s `defer`, so it covers the early returns
+    /// that never begin a recording — model still loading, no audio device, a
+    /// non-idle recorder — as well as the success and failure paths. A parked
+    /// release that outlives its start has nothing to act on and must not survive
+    /// to meet the next one.
+    ///
+    /// One exit is *not* covered: `guard !captureTransitionInFlight` sits above
+    /// the `defer`, so a hold start bailing there leaves the window open and its
+    /// release can be consumed by the flow already running. Reaching that needs
+    /// two starts within about one main-actor hop. Hoisting the `defer` would not
+    /// fix it and would make things worse — a second flow bailing at that guard
+    /// would then clear a live hold's window. The real fix is a generation token
+    /// on the parked release; deferred rather than bolted on here.
     func endHoldToTalkStartWindow() {
         holdToTalkStartInFlight = false
         pendingHoldRelease = nil

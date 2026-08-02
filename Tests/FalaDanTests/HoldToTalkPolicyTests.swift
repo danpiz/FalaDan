@@ -29,8 +29,9 @@ struct HoldToTalkPolicyTests {
         #expect(!HoldToTalkPolicy.shouldTranscribe(heldFor: -3, minimum: 0.15))
     }
 
-    /// A zero threshold disables the guard entirely, which is the documented
-    /// way to opt out via MIN_HOLD_MS=0.
+    /// A zero threshold disables the guard entirely. This is what will back
+    /// `MIN_HOLD_MS=0` once the `.env` loader lands in Phase 2; nothing sets it
+    /// today, so the parameter exists but only ever receives the default.
     @Test func zeroThresholdAcceptsAnyNonNegativeHold() {
         #expect(HoldToTalkPolicy.shouldTranscribe(heldFor: 0, minimum: 0))
     }

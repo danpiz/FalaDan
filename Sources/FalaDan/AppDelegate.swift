@@ -397,6 +397,12 @@ final class HotkeyDelegateImpl: HotkeyManagerDelegate {
         }
     }
 
+    nonisolated func hotkeyDidAbortRecording() {
+        Task { @MainActor in
+            self.appState?.abortHoldToTalk()
+        }
+    }
+
     nonisolated func hotkeyDidCancelRecording() {
         Task { @MainActor in
             self.appState?.cancelRecording()

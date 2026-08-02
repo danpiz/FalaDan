@@ -6,6 +6,7 @@ import AppKit
 protocol HotkeyManagerDelegate: AnyObject {
     nonisolated func hotkeyDidStartRecording()
     nonisolated func hotkeyDidStopRecording()
+    nonisolated func hotkeyDidAbortRecording()
     nonisolated func hotkeyDidCancelRecording()
     nonisolated func hotkeyDidToggleAutoCleanupRecording()
     nonisolated func hotkeyDidEditSelection()
@@ -82,6 +83,12 @@ final class HotkeyManager {
         }
         shortcutMonitor.onKeyUp(for: .toggleRecording) { [weak self] in
             self?.delegate?.hotkeyDidStopRecording()
+        }
+        // Fn held to reach Fn+← is navigation, not dictation. Without this the
+        // press would complete through the key-up handler above and transcribe
+        // whatever the microphone caught in the meantime.
+        shortcutMonitor.onAbort(for: .toggleRecording) { [weak self] in
+            self?.delegate?.hotkeyDidAbortRecording()
         }
     }
 
