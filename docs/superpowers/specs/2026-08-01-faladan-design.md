@@ -115,8 +115,22 @@ a dropped key-up now means a recording that never stops. Its comment that hold d
 "deliberately irrelevant" is no longer true of the system and must be updated.
 
 Touches: `Services/Hotkeys/HotkeyManager.swift`, `AppDelegate.swift`, `AppState.swift`,
-plus a new hold-duration policy file. `FnStateMachine` and `CustomShortcutMonitor` are
-**not** modified.
+plus a new hold-duration policy file.
+
+**Amended during implementation.** This section originally said `FnStateMachine` and
+`CustomShortcutMonitor` would not be modified. Both were, for one reason each, found by review:
+
+- `CustomShortcutMonitor` retired a press used as a modifier by firing the *same* key-up
+  handler as a genuine release. Harmless for an action that only winds down, but the key-up
+  **is** the action here — so holding Fn and then pressing Fn+← transcribed ambient audio and
+  pasted it into the app being navigated. Fixing it needs a signal the monitor did not
+  previously emit: an optional abort handler, falling back to key-up for any shortcut that
+  does not distinguish the two, routed from only the two `markUsedAsModifier` sites.
+- `FnStateMachine` is comment-only, and required by this same section: its claim that hold
+  duration is "deliberately irrelevant" stopped being true of the system.
+
+The distinction between a released press and a retired one is the thing hold-to-talk needs
+that toggle did not. It cannot be expressed above the monitor.
 
 ### 5.3 Config
 

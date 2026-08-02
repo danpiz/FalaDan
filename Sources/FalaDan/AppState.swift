@@ -230,8 +230,10 @@ final class AppState: Sendable {
 
     /// Hotkey released. Transcribes a real hold; discards a brushed key.
     ///
-    /// Discarding routes through `cancelRecording()` rather than
-    /// `stopAndTranscribe()` so no API call is made and nothing is pasted.
+    /// Discarding routes through `discardRecording()` rather than
+    /// `stopAndTranscribe()` so no API call is made and nothing is pasted — and
+    /// not through `cancelRecording()`, which is Esc's flow and deliberately
+    /// keeps the audio and a history row.
     ///
     /// The recorder may not be live yet — a hold shorter than the CoreAudio
     /// device open resolves here first. In that case the decision is parked and
