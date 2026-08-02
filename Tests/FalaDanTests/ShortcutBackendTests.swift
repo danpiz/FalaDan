@@ -79,10 +79,15 @@ struct ShortcutBackendClassificationTests {
         #expect(CustomShortcut(keyCode: UInt16(kVK_ANSI_W), fn: true).compactDisplayString == "Fn+W")
     }
 
-    /// Every default binding must land on Carbon, so a stock install needs no
-    /// event tap and no Accessibility grant for its shortcuts.
-    @Test func defaultShortcutsAllUseCarbon() {
-        for (_, shortcut) in CustomShortcutStorage.defaultShortcuts() {
+    /// Every default binding except the recording hotkey must land on Carbon, so
+    /// no stock shortcut beyond that one needs the event tap.
+    ///
+    /// `.toggleRecording` is the deliberate exception: hold-to-talk needs both a
+    /// press and a release, and a bare modifier is the only binding that reports
+    /// both. That costs an event tap, which FalaDan requires anyway — pasting the
+    /// transcript needs Accessibility regardless.
+    @Test func defaultShortcutsUseCarbonExceptTheRecordingHotkey() {
+        for (name, shortcut) in CustomShortcutStorage.defaultShortcuts() where name != .toggleRecording {
             guard case .carbon = ShortcutBackend.classify(shortcut) else {
                 Issue.record("Default shortcut \(shortcut.compactDisplayString) is not a Carbon chord")
                 continue

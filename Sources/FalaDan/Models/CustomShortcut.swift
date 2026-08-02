@@ -262,7 +262,10 @@ final class CustomShortcutStorage {
 
     static func defaultShortcuts() -> [CustomShortcutName: CustomShortcut] {
         [
-            .toggleRecording: CustomShortcut(keyCode: UInt16(kVK_ANSI_W), option: true),
+            // Bare Fn, key code 63. The only bare modifier the tap tracks, and
+            // the tap is the only backend that reports both edges of a modifier
+            // press — which hold-to-talk requires.
+            .toggleRecording: CustomShortcut(keyCode: 63),
             .cancelRecording: CustomShortcut(keyCode: UInt16(kVK_Escape)),  // Escape
             .autoCleanupRecording: CustomShortcut(keyCode: UInt16(kVK_ANSI_R), option: true),
             .editSelection: CustomShortcut(keyCode: UInt16(kVK_ANSI_E), option: true),
