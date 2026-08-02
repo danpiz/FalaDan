@@ -3,13 +3,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "MiniWhisper",
+    name: "FalaDan",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "MiniWhisper", targets: ["MiniWhisper"]),
-        .executable(name: "miniwhispercli", targets: ["MiniWhisperCLI"]),
+        .executable(name: "FalaDan", targets: ["FalaDan"]),
+        .executable(name: "faladancli", targets: ["FalaDanCLI"]),
     ],
     dependencies: [
         .package(
@@ -20,13 +20,13 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "MiniWhisper",
+            name: "FalaDan",
             dependencies: [
                 "FluidAudio",
                 "whisper",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
-            path: "Sources/MiniWhisper",
+            path: "Sources/FalaDan",
             exclude: ["Resources"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
@@ -34,12 +34,12 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "MiniWhisperCLI",
+            name: "FalaDanCLI",
             dependencies: [
                 "FluidAudio",
                 "whisper",
             ],
-            path: "Sources/MiniWhisperCLI",
+            path: "Sources/FalaDanCLI",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
@@ -50,9 +50,9 @@ let package = Package(
             checksum: "866b43e4a3f31d1f898c7300d36e786841723e7be5a0fcdaa5879daea2f4389d"
         ),
         .testTarget(
-            name: "MiniWhisperTests",
-            dependencies: ["MiniWhisper"],
-            path: "Tests/MiniWhisperTests",
+            name: "FalaDanTests",
+            dependencies: ["FalaDan"],
+            path: "Tests/FalaDanTests",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]

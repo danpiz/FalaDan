@@ -1,0 +1,803 @@
+import SwiftUI
+
+struct MenuBarView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.updaterController) private var updaterController
+
+    var body: some View {
+        VStack(spacing: 0) {
+            RecordingHeaderView()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+
+            Divider()
+                .padding(.horizontal, 12)
+
+            if !appState.permissions.allGranted {
+                PermissionsBanner()
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+            }
+
+            if let updaterController, !updaterController.updateViewModel.state.isIdle {
+                UpdateBanner(model: updaterController.updateViewModel)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+            }
+
+            if appState.showMenuBarVisibilityHint {
+                MenuBarVisibilityHint()
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+            }
+
+            VStack(spacing: 20) {
+                MicrophoneSection()
+                ShortcutSection()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+
+            Divider()
+                .padding(.horizontal, 12)
+
+            StatsBarView()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+            Divider()
+                .padding(.horizontal, 12)
+
+            FooterBarView()
+        }
+        .frame(width: 340)
+        .environment(appState)
+    }
+}
+
+// MARK: - Recording Header
+
+private struct RecordingHeaderView: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: statusIcon)
+                .font(.system(size: 13))
+                .foregroundColor(statusColor)
+                .frame(width: 20)
+                .animation(.easeInOut(duration: 0.15), value: statusIcon)
+
+            Text(statusText)
+                .font(.system(size: 13, weight: .medium))
+
+            Spacer()
+
+            if appState.recorder.state.isRecording {
+                Text(formatDuration(appState.recorder.currentDuration))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.secondary)
+            } else if appState.recorder.state.isIdle,
+                      let progress = appState.modelLoadState.progress
+            {
+                HStack(spacing: 6) {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                        .frame(width: 80)
+                        .controlSize(.small)
+                    Text("\(Int(progress * 100))%")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+            } else if shouldShowModelSpinner {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private var statusIcon: String {
+        if !appState.permissions.allGranted {
+            return "exclamationmark.triangle.fill"
+        }
+        if appState.recorder.state.isIdle,
+           appState.modelLoadState.failureMessage != nil
+        {
+            return "exclamationmark.triangle.fill"
+        }
+        switch appState.recorder.state {
+        case .idle: return "waveform"
+        case .recording: return "record.circle.fill"
+        case .processing: return "waveform.badge.ellipsis"
+        case .error: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        if !appState.permissions.allGranted {
+            return .orange
+        }
+        if appState.recorder.state.isIdle,
+           appState.modelLoadState.failureMessage != nil
+        {
+            return .red
+        }
+        switch appState.recorder.state {
+        case .idle: return .secondary
+        case .recording: return .red
+        case .processing: return .orange
+        case .error: return .red
+        }
+    }
+
+    private var statusText: String {
+        if !appState.permissions.allGranted {
+            return "Permissions Required"
+        }
+        if appState.isEditModeProcessing { return editingStatusText }
+        switch appState.recorder.state {
+        case .idle:
+            if appState.transcriptionMode == .custom
+                && !appState.customProviderSettings.isConfigured
+            {
+                return "Configure Endpoint"
+            }
+            switch appState.modelLoadState {
+            case .idle:
+                return "Loading Model..."
+            case .loading(let phase, _):
+                return loadingStatusText(for: phase)
+            case .ready:
+                return "Ready"
+            case .failed:
+                return "Model Load Failed"
+            }
+        case .recording: return "Recording"
+        case .processing: return "Transcribing..."
+        case .error(let msg): return msg
+        }
+    }
+
+    private var shouldShowModelSpinner: Bool {
+        guard appState.recorder.state.isIdle else { return false }
+        guard appState.modelLoadState.failureMessage == nil else { return false }
+        if appState.transcriptionMode == .custom
+            && !appState.customProviderSettings.isConfigured
+        {
+            return false
+        }
+        return !appState.isModelLoaded
+    }
+
+    private func loadingStatusText(for phase: ModelLoadPhase) -> String {
+        switch phase {
+        case .checking:
+            return "Checking Model..."
+        case .downloading:
+            return "Downloading Model..."
+        case .preparing:
+            return "Preparing Model..."
+        }
+    }
+
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let minutes = Int(duration) / 60
+        let seconds = Int(duration) % 60
+        return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    /// Surfaces the selection size for larger edits so the user knows
+    /// why it might take a bit. Below the threshold the count is noise,
+    /// so we keep the plain "Editing…" treatment.
+    private var editingStatusText: String {
+        let count = appState.editModeProcessingCharCount
+        guard count >= EditModeProvider.softCharThreshold else {
+            return "Editing..."
+        }
+        let formatted = count.formatted(.number.grouping(.automatic))
+        return "Editing \(formatted) chars..."
+    }
+}
+
+// MARK: - Section Header
+
+private struct SectionHeader: View {
+    let title: String
+    let icon: String
+    var iconColor: Color = .secondary
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundColor(iconColor)
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+        }
+    }
+}
+
+// MARK: - Microphone Section
+
+private struct MicrophoneSection: View {
+    @Environment(AppState.self) private var appState
+    @State private var showPicker = false
+    @State private var isHovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Microphone", icon: "mic.fill")
+
+            Button {
+                showPicker.toggle()
+            } label: {
+                HStack(spacing: 8) {
+                    Text(appState.deviceManager.effectiveDeviceName)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 12)
+
+                    if appState.deviceManager.inputMode == .systemDefault {
+                        Text("System Default")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    } else if !appState.deviceManager.isSelectedDeviceAvailable {
+                        Text("Unavailable")
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
+                    }
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(
+                            isHovering ? Color.primary.opacity(0.06) : Color.primary.opacity(0.04))
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    isHovering = hovering
+                }
+            }
+            .popover(isPresented: $showPicker, arrowEdge: .bottom) {
+                MicrophonePickerView()
+            }
+        }
+    }
+}
+
+private struct MicrophonePickerView: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Input Device")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.5)
+                .padding(.horizontal, 10)
+
+            VStack(spacing: 2) {
+                // System Default option
+                MicPickerRow(
+                    name: "System Default",
+                    subtitle: appState.deviceManager.systemDefaultDeviceName,
+                    isSelected: appState.deviceManager.inputMode == .systemDefault
+                ) {
+                    appState.deviceManager.selectSystemDefault()
+                }
+
+                if !appState.deviceManager.availableDevices.isEmpty {
+                    Divider()
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 2)
+
+                    ForEach(appState.deviceManager.availableDevices) { device in
+                        MicPickerRow(
+                            name: device.name,
+                            subtitle: nil,
+                            isSelected: appState.deviceManager.inputMode == .specificDevice
+                                && appState.deviceManager.selectedDeviceUID == device.uid
+                        ) {
+                            appState.deviceManager.selectDevice(device)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 280)
+    }
+}
+
+private struct MicPickerRow: View {
+    let name: String
+    let subtitle: String?
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(.system(size: 13))
+                        .foregroundColor(.primary)
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHovering ? Color.primary.opacity(0.06) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovering = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Shortcut Section
+
+private struct ShortcutSection: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Shortcut", icon: "command")
+
+            ShortcutRow(label: "Toggle Recording", name: .toggleRecording)
+
+            if appState.autoCleanupEnabled {
+                ShortcutRow(label: "Cleanup Recording", name: .autoCleanupRecording)
+            }
+
+            if appState.selectionEnabled {
+                ShortcutRow(label: "Edit Selection", name: .editSelection)
+            }
+        }
+    }
+}
+
+private struct ShortcutRow: View {
+    @Environment(AppState.self) private var appState
+    let label: String
+    let name: CustomShortcutName
+    @State private var isEditing = false
+    @State private var isHovering = false
+
+    var body: some View {
+        if isEditing {
+            HStack(spacing: 8) {
+                ShortcutRecorderView(
+                    shortcut: Binding(
+                        get: { CustomShortcutStorage.get(name) },
+                        set: { newShortcut in
+                            CustomShortcutStorage.set(newShortcut, for: name)
+                            appState.reloadShortcuts()
+                            isEditing = false
+                        }
+                    ))
+
+                Spacer()
+
+                Button {
+                    isEditing = false
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.primary.opacity(0.08))
+            )
+        } else {
+            Button {
+                isEditing = true
+            } label: {
+                HStack(spacing: 8) {
+                    Text(label)
+                        .font(.system(size: 13))
+
+                    Spacer(minLength: 12)
+
+                    if let shortcut = CustomShortcutStorage.get(name) {
+                        if shortcut.needsRerecording {
+                            // Nothing can register this binding, so it renders
+                            // like any other while never firing.
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.orange)
+                                .help("This shortcut can no longer be registered. Record a new one.")
+                        }
+                        Text(shortcut.compactDisplayString)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Not Set")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isHovering ? Color.primary.opacity(0.06) : Color.clear)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    isHovering = hovering
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Menu Bar Visibility Hint
+
+private struct MenuBarVisibilityHint: View {
+    @Environment(AppState.self) private var appState
+    @State private var isSettingsHovering = false
+    @State private var isDismissHovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "menubar.rectangle")
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Can't see FalaDan?")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("Hold ⌘ and drag the waveform icon closer to the clock, or hide unused icons in Menu Bar Settings.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Button {
+                    UserDefaults.standard.set(true, forKey: "MenuBarVisibilityHintDismissed")
+                    appState.showMenuBarVisibilityHint = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(isDismissHovering ? .primary : .secondary)
+                        .frame(width: 18, height: 18)
+                        .background(
+                            Circle()
+                                .fill(isDismissHovering ? Color.primary.opacity(0.08) : .clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        isDismissHovering = hovering
+                    }
+                }
+            }
+
+            Button {
+                SystemSettingsLinks.openMenuBarSettings()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 10))
+                    Text("Open Menu Bar Settings")
+                        .font(.system(size: 11, weight: .medium))
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 10))
+                }
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isSettingsHovering ? Color.orange.opacity(0.12) : Color.orange.opacity(0.06))
+                )
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    isSettingsHovering = hovering
+                }
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.orange.opacity(0.05))
+        )
+    }
+}
+
+// MARK: - Permissions Banner
+
+private struct PermissionsBanner: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(
+                title: "Permissions Needed", icon: "exclamationmark.shield.fill", iconColor: .orange
+            )
+
+            VStack(spacing: 4) {
+                if !appState.permissions.accessibilityGranted {
+                    PermissionRow(
+                        icon: "keyboard",
+                        label: "Accessibility",
+                        detail: "Required for global hotkeys"
+                    ) {
+                        appState.permissions.openAccessibilitySettings()
+                    }
+                }
+
+                if !appState.permissions.microphoneGranted {
+                    PermissionRow(
+                        icon: "mic.slash",
+                        label: "Microphone",
+                        detail: "Required for recording"
+                    ) {
+                        Task { await appState.permissions.requestMicrophone() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct PermissionRow: View {
+    let icon: String
+    let label: String
+    let detail: String
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(label)
+                        .font(.system(size: 13, weight: .medium))
+                    Text(detail)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Text("Grant")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.orange)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isHovering ? Color.orange.opacity(0.08) : Color.orange.opacity(0.04))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovering = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Footer Bar
+
+private struct FooterBarView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.updaterController) private var updaterController
+    @StateObject private var launchManager = LaunchAtLoginManager.shared
+    @State private var showHistory = false
+    @State private var showReplacements = false
+    @State private var showModelPicker = false
+    @State private var showFormat = false
+    @State private var showSettings = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer()
+
+            FooterButton(
+                icon: modelPickerIcon, label: "Model",
+                color: modelPickerColor
+            ) {
+                showModelPicker.toggle()
+            }
+            .popover(isPresented: $showModelPicker, arrowEdge: .bottom) {
+                ModelPickerView()
+                    .popoverFocusSink()
+                    .resignsResponderOnClose()
+            }
+
+            if appState.replacementSettings.enabled {
+                FooterButton(
+                    icon: "arrow.left.arrow.right", label: "Replace",
+                    color: .primary
+                ) {
+                    showReplacements.toggle()
+                }
+                .popover(isPresented: $showReplacements, arrowEdge: .bottom) {
+                    ReplacementsView(
+                        settings: Binding(
+                            get: { appState.replacementSettings },
+                            set: { appState.replacementSettings = $0 }
+                        ),
+                        onSave: { appState.replacementSettings.save() }
+                    )
+                    .popoverFocusSink()
+                    .resignsResponderOnClose()
+                }
+            }
+
+            FooterButton(icon: "textformat", label: "Format", color: .secondary) {
+                showFormat.toggle()
+            }
+            .popover(isPresented: $showFormat, arrowEdge: .bottom) {
+                FormatPopoverView().resignsResponderOnClose()
+            }
+
+            FooterButton(icon: "clock.arrow.circlepath", label: "History", color: .secondary) {
+                showHistory.toggle()
+            }
+            .popover(isPresented: $showHistory, arrowEdge: .bottom) {
+                HistoryPopoverView().resignsResponderOnClose()
+            }
+
+            FooterButton(icon: settingsIcon, label: "Settings", color: settingsColor) {
+                showSettings.toggle()
+            }
+            .popover(isPresented: $showSettings, arrowEdge: .bottom) {
+                SettingsPopoverView {
+                    showSettings = false
+                    FalaDanSettingsWindowController.shared.open(
+                        appState: appState,
+                        updaterController: updaterController
+                    )
+                }
+                .popoverFocusSink()
+                .resignsResponderOnClose()
+            }
+
+            FooterButton(icon: "xmark.circle", label: "Quit", color: .red) {
+                NSApplication.shared.terminate(nil)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .animation(.easeInOut(duration: 0.15), value: appState.transcriptionMode)
+        .onAppear {
+            launchManager.refresh()
+        }
+    }
+
+    private var modelPickerIcon: String {
+        switch appState.transcriptionMode {
+        case .default: return "waveform"
+        case .multilingual: return "globe"
+        case .custom: return "server.rack"
+        }
+    }
+
+    // Custom mode selected but the endpoint isn't configured yet — surface
+    // as orange on the Model footer button, which is now where the user
+    // resolves the gap (the config UI lives inside that popover). Mirror
+    // the same warning when the *edit* model is Custom but its endpoint
+    // is unconfigured — same UI affordance, same fix path.
+    private var needsCustomConfigAttention: Bool {
+        let transcriptionNeedsConfig = appState.transcriptionMode == .custom
+            && !appState.customProviderSettings.isConfigured
+        let editNeedsConfig = !appState.editModeBehavior.isOff
+            && EditModeSettings.model == .custom
+            && !appState.customEditProviderSettings.isConfigured
+        return transcriptionNeedsConfig || editNeedsConfig
+    }
+
+    private var modelPickerColor: Color {
+        if needsCustomConfigAttention { return .orange }
+        return appState.transcriptionMode == .default ? .secondary : .accentColor
+    }
+
+    private var settingsIcon: String {
+        launchManager.isEnabled ? "gearshape.fill" : "gearshape"
+    }
+
+    private var settingsColor: Color {
+        launchManager.isEnabled ? .accentColor : .secondary
+    }
+}
+
+private struct FooterButton: View {
+    let icon: String
+    let label: String
+    var color: Color = .secondary
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 13))
+                    .foregroundColor(color)
+                    .frame(width: 24, height: 20)
+
+                Text(label)
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHovering ? Color.primary.opacity(0.06) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovering = hovering
+            }
+        }
+    }
+}

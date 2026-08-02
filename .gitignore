@@ -10,3 +10,7 @@ DerivedData/
 .envrc
 *.zip
 *.dmg
+
+# FalaDan runtime config — holds API keys, never commit
+.env
+
