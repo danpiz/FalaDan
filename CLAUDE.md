@@ -63,5 +63,32 @@ Three things no test reaches. Ask Dan; do not claim them yourself.
 2. The recording indicator appears, and always disappears — including on the discard path
 3. Text actually lands in a third-party app
 
-Requires Microphone, Accessibility, and Input Monitoring permissions. Rebuilding can reset the
-Accessibility grant, which presents as the hotkey silently not firing.
+## Permissions
+
+FalaDan needs exactly **two**: **Microphone** and **Accessibility**. That is what
+`PermissionsManager` checks, and it is the whole list.
+
+**Input Monitoring is not required.** It is the weaker grant that lets *listen-only* event taps
+work in apps without Accessibility. FalaDan's Fn tap is a modifying tap — it swallows the Fn
+press so macOS does not fire its own 🌐 action — and modifying taps need Accessibility, which
+subsumes Input Monitoring. The original PRD listed three permissions; the implementation says
+two.
+
+### When the hotkey does nothing
+
+Almost always Accessibility, and almost always because the grant no longer matches the binary.
+macOS remembers a grant by the app's *designated requirement*. Under ad-hoc signing that pins a
+cdhash which changes on every build, so each `just dev` voids the grant while System Settings
+keeps showing the app ticked.
+
+`Scripts/setup-dev-signing.sh` creates a stable self-signed identity that fixes this
+permanently — run it once per machine. `Scripts/sign-dev-app.sh` then finds it by name, with no
+environment variable to set. Confirm a build picked it up with:
+
+```bash
+codesign -dv --verbose=2 /Applications/FalaDan.app 2>&1 | grep Authority
+# want: Authority=FalaDan Dev Signing    (NOT "Signature=adhoc")
+```
+
+If a grant is already stale, toggling it off and on does not help — the row itself is bound to
+the dead signature. Run `just reset-tcc` and grant again.

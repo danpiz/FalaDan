@@ -14,7 +14,11 @@ BUNDLE_ID_RELEASE="com.faladan.app"
 
 if [[ "$BUILD_CONFIG" == "debug" ]]; then
     BUNDLE_ID="$BUNDLE_ID_DEBUG"
-    DISPLAY_NAME="FalaDan Dev"
+    # Same display name as release. Upstream suffixed debug builds with "Dev" to
+    # tell two installed copies apart; FalaDan only ever installs the local
+    # build, and the bundle IDs already differ, so the suffix was only ever
+    # visible clutter in the menu bar and /Applications.
+    DISPLAY_NAME="FalaDan"
     FEED_URL=""
     AUTO_CHECKS=false
 else

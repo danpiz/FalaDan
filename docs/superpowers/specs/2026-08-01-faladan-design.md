@@ -78,7 +78,7 @@ retaining `upstream` as a remote for future fixes. The existing `wispr-clone-prd
 `docs/` are preserved into the clone.
 
 **Baseline gate (human):** `just build`, `swift test`, `just dev`, grant Microphone /
-Accessibility / Input Monitoring, and confirm dictation works end to end. No code changes
+Accessibility, and confirm dictation works end to end. No code changes
 before this passes. This baseline is what every later task is measured against.
 
 **Rename:** `MiniWhisper` → `FalaDan` across module name, `Package.swift` targets, bundle ID,
@@ -261,7 +261,11 @@ checkpoints above.
 
 - **Microphone** — recording
 - **Accessibility** — simulating ⌘V, reading key events system-wide
-- **Input Monitoring** — global hotkey across apps
+- ~~Input Monitoring~~ — **not required.** Listed in the originating PRD, but wrong:
+  `PermissionsManager` checks only Microphone and Accessibility. Input Monitoring is the weaker
+  grant for *listen-only* event taps in apps without Accessibility, and FalaDan's Fn tap is a
+  modifying tap (it swallows the press so macOS does not fire its own 🌐 action), which requires
+  Accessibility anyway.
 - No Screen Recording (no system-audio capture)
 
 ## 9. Out of scope for v1
