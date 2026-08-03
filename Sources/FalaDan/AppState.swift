@@ -210,7 +210,7 @@ final class AppState: Sendable {
         holdToTalkStartedAt = nil
 
         let held = startedAt.map { ProcessInfo.processInfo.systemUptime - $0 }
-        let decision = HoldToTalkPolicy.release(heldFor: held)
+        let decision = HoldToTalkPolicy.release(heldFor: held, minimum: envConfig.minHold)
 
         if recorder.state.isRecording {
             applyHoldRelease(decision)

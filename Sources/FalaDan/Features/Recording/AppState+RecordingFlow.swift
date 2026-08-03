@@ -100,7 +100,7 @@ extension AppState {
         // decorative — every hold between 0.15s and 1.0s passed the policy and
         // then died here with an error toast, so a deliberate short word
         // ("yes", "undo") could not be dictated at all.
-        guard duration >= 0.3 else {
+        guard duration >= envConfig.minTranscribe else {
             let recordingId = currentRecordingId
             await recorder.cancelRecording()
             recorder.reset()
