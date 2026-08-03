@@ -160,6 +160,23 @@ struct EnvConfigCleanupGateTests {
         c.llmModel = "\t "
         #expect(!c.isCleanupConfigured)
     }
+
+    /// Newlines count as blank too. The parser trims with
+    /// `.whitespacesAndNewlines`, and this guard has to agree with it — a value
+    /// that is only a newline must not read as a usable key.
+    @Test func newlineOnlyValuesDoNotCountAsConfigured() {
+        var c = EnvConfig.defaults
+        c.llmAPIKey = "\n"
+        c.llmModel = "m"
+        #expect(!c.isCleanupConfigured)
+    }
+
+    /// A whitespace-only key is unset, not redacted — the log line should say so.
+    @Test func descriptionReportsAWhitespaceOnlyKeyAsUnset() {
+        var c = EnvConfig.defaults
+        c.llmAPIKey = "   "
+        #expect(c.description.contains("<unset>"))
+    }
 }
 
 /// Secrets must never reach a log line or a crash report.

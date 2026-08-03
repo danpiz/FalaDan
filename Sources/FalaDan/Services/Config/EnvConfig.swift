@@ -42,9 +42,11 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     /// set.
     var isCleanupConfigured: Bool {
         guard llmCleanupEnabled else { return false }
-        guard let key = llmAPIKey?.trimmingCharacters(in: .whitespaces), !key.isEmpty
+        guard let key = llmAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !key.isEmpty
         else { return false }
-        guard let model = llmModel?.trimmingCharacters(in: .whitespaces), !model.isEmpty
+        guard let model = llmModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !model.isEmpty
         else { return false }
         return true
     }
@@ -54,7 +56,8 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
 
     /// Redacts the API key. This type ends up in log lines and crash reports.
     var description: String {
-        let key = (llmAPIKey?.isEmpty == false) ? "<redacted>" : "<unset>"
+        let trimmedKey = llmAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = (trimmedKey?.isEmpty == false) ? "<redacted>" : "<unset>"
         return """
             EnvConfig(baseURL: \(llmBaseURL), key: \(key), \
             model: \(llmModel ?? "<unset>"), cleanup: \(llmCleanupEnabled), \
