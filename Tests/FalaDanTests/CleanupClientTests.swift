@@ -86,4 +86,10 @@ struct CleanupClientEndpointTests {
     @Test func returnsNilForAnUnusableBase() {
         #expect(CleanupClient.endpoint(base: "") == nil)
     }
+
+    @Test func stripsRepeatedTrailingSlashes() {
+        #expect(
+            CleanupClient.endpoint(base: "https://api.example.com/v1//")?.absoluteString
+                == "https://api.example.com/v1/chat/completions")
+    }
 }

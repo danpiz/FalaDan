@@ -48,6 +48,14 @@ struct EnvConfigParsingTests {
         #expect(EnvConfig.parse("LLM_API_KEY='quoted'").llmAPIKey == "quoted")
     }
 
+    /// Quotes shield their contents from the line-level trim, so the value has
+    /// to be trimmed again after they are stripped — otherwise the whitespace
+    /// ends up inside the Authorization header.
+    @Test func trimsInsideQuotes() {
+        #expect(EnvConfig.parse(#"LLM_API_KEY="sk-abc  ""#).llmAPIKey == "sk-abc")
+        #expect(EnvConfig.parse("LLM_MODEL='  m  '").llmModel == "m")
+    }
+
     /// A lone quote is part of the value, not a delimiter — stripping it would
     /// silently corrupt a key that legitimately contains one.
     @Test func doesNotStripUnmatchedQuotes() {

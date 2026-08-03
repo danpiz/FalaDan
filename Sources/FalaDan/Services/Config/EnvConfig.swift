@@ -125,13 +125,17 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
         return config
     }
 
-    /// Strips one layer of matching quotes. Unmatched quotes are part of the
-    /// value — stripping those would corrupt a key that contains one.
+    /// Strips one layer of matching quotes, then trims again.
+    ///
+    /// The caller trims before calling, but quotes shield whatever is inside
+    /// them from that pass — so `KEY="value  "` would otherwise keep its
+    /// trailing spaces and be sent as part of the credential.
     private static func unquote(_ value: String) -> String {
         guard value.count >= 2, let first = value.first, let last = value.last,
             first == last, first == "\"" || first == "'"
         else { return value }
         return String(value.dropFirst().dropLast())
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Anything not recognisably falsy stays enabled: a typo must not silently

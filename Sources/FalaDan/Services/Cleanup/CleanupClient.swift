@@ -29,9 +29,12 @@ struct CleanupClient: Sendable {
         session: URLSession = .shared
     ) async throws -> String {
         guard config.isCleanupConfigured,
-            let model = config.llmModel,
-            let apiKey = config.llmAPIKey
+            var model = config.llmModel,
+            var apiKey = config.llmAPIKey
         else { throw CleanupClientError.notConfigured }
+
+        model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard let url = Self.endpoint(base: config.llmBaseURL) else {
             throw CleanupClientError.invalidEndpoint
@@ -71,7 +74,8 @@ struct CleanupClient: Sendable {
     static func endpoint(base: String) -> URL? {
         let trimmed = base.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
-        let normalized = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        var normalized = trimmed
+        while normalized.hasSuffix("/") { normalized = String(normalized.dropLast()) }
         return URL(string: normalized + "/chat/completions")
     }
 
