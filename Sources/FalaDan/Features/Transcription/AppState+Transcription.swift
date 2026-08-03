@@ -11,17 +11,30 @@ private enum TranscriptDelivery: Sendable {
 extension AppState {
     // MARK: - Transcription
 
-    /// Runs the auto-cleanup LLM pass on a raw transcript when the
-    /// caller passes `applyCleanup: true` (i.e. the recording was
-    /// started via the Auto-Cleanup shortcut). Returns the (possibly
-    /// cleaned) text + history metadata for the run, or `(rawText, nil)`
-    /// when the caller opts out, the transcript is empty, or the call
-    /// fails. Failures are intentionally silent — the user gets the raw
-    /// transcript pasted instead of being blocked on a model error.
+    /// Runs the LLM cleanup pass on a raw transcript.
+    ///
+    /// Returns the cleaned text plus history metadata, or `(rawText, nil)` when
+    /// the caller opts out, cleanup is not configured, the transcript is empty,
+    /// or the call fails.
+    ///
+    /// Failures are intentionally silent — the user gets the raw transcript
+    /// pasted rather than being blocked on a model error. That mattered when
+    /// cleanup was opt-in; it matters more now that it runs on every dictation,
+    /// because an expired key would otherwise cost the user every word they say.
     func applyAutoCleanup(
         rawText: String, applyCleanup: Bool
     ) async -> (text: String, cleanup: RecordingCleanup?) {
         guard applyCleanup, !rawText.isEmpty else {
+            return (rawText, nil)
+        }
+
+        // Second gate, deliberately redundant with the call site's. Callers that
+        // pass `applyCleanup: true` unconditionally — re-transcribe-with-cleanup
+        // in the history popover, for one — would otherwise reach the client and
+        // take the throw-and-log path for what is simply an unconfigured app.
+        // Skipping is the honest answer, and it is what the code this replaced
+        // did for its own unconfigured case.
+        guard envConfig.isCleanupConfigured else {
             return (rawText, nil)
         }
 
@@ -47,7 +60,8 @@ extension AppState {
             let cleanup = RecordingCleanup(
                 rawText: rawText,
                 cleanedText: trimmed,
-                backendModel: envConfig.llmModel ?? "unknown",
+                backendModel: (envConfig.llmModel ?? "unknown")
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
                 cleanupDuration: duration
             )
             return (trimmed, cleanup)
@@ -55,13 +69,46 @@ extension AppState {
             // Silent UX is intentional — fall back to the raw transcript so the
             // user isn't blocked. Now that cleanup runs on every dictation, this
             // is what stops a model outage or an expired key from costing the
-            // user their words. Logged so device logs still capture it.
+            // user their words.
             //
-            // The error is never surfaced in the UI and never carries the key:
-            // CleanupClient's serverError holds only the response body.
+            // Because the failure is invisible by design, this log line is the
+            // only signal that anything is wrong — so it has to say something
+            // useful. `localizedDescription` does not: `CleanupClientError`
+            // deliberately has no `LocalizedError` conformance (that is what
+            // keeps response bodies, which some providers echo a partial key
+            // into, out of the log), so it renders as "error 2".
+            //
+            // Hence the switch: the status code and failure kind are the
+            // actionable parts, and neither can carry a secret.
             log.error(
-                "Cleanup failed: \(error.localizedDescription, privacy: .public)")
+                "Cleanup failed: \(Self.diagnostic(for: error), privacy: .public)")
             return (rawText, nil)
+        }
+    }
+
+    /// A loggable description of a cleanup failure that cannot leak a secret.
+    ///
+    /// Deliberately never includes the response body. A 401 body from several
+    /// providers echoes back part of the key that was sent, and this line goes to
+    /// the unified log where it outlives the session.
+    static func diagnostic(for error: any Error) -> String {
+        switch error {
+        case CleanupClientError.serverError(let code, _):
+            // The status code alone separates the cases worth acting on: 401 is
+            // a bad key, 404 a retired model or wrong base URL, 429 a rate limit.
+            return "HTTP \(code)"
+        case CleanupClientError.notConfigured:
+            return "not configured"
+        case CleanupClientError.invalidEndpoint:
+            return "invalid endpoint — check LLM_BASE_URL"
+        case CleanupClientError.emptyResponse:
+            return "empty response"
+        case let urlError as URLError:
+            // Distinguishes a timeout from no network, which is the difference
+            // between "the model is slow" and "you are offline".
+            return "URLError \(urlError.code.rawValue)"
+        default:
+            return error.localizedDescription
         }
     }
 
