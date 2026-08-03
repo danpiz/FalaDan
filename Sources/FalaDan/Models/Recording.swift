@@ -55,15 +55,15 @@ struct RecordingConfiguration: Codable, Equatable, Hashable, Sendable {
     var provider: String?
 }
 
-/// Metadata captured for a voice-driven edit-mode invocation. The audio
-/// + voice-instruction transcript live on the parent `Recording`; this
-/// holds the bits unique to the edit step: what text the user had
-/// selected, what the backend produced, and which CLI/model ran the
-/// edit. `backendModel` is stored as a free-form string so future
-/// per-provider model overrides remain captured in history without
-/// schema churn. `editDuration` is the wall-clock latency of the CLI
-/// call itself — surfaced in history so the user can compare model
-/// speed at a glance. Optional for older recordings predating it.
+/// Legacy: metadata from the voice-driven edit-selection feature, deleted
+/// in Phase 2. Decode/display compatibility only — nothing produces a new
+/// `RecordingEditMode` anymore; this type exists purely so history entries
+/// created before the deletion still decode and render correctly. The
+/// audio + voice-instruction transcript lived on the parent `Recording`;
+/// this held the bits unique to the edit step: what text the user had
+/// selected, what the backend produced, and which CLI/model ran the edit.
+/// `editDuration` is the wall-clock latency of that CLI call, surfaced in
+/// history so the user could compare model speed at a glance.
 struct RecordingEditMode: Codable, Equatable, Hashable, Sendable {
     let originalSelection: String
     let editedResult: String
@@ -120,8 +120,9 @@ struct Recording: Codable, Identifiable, Equatable, Hashable, Sendable {
     var transcription: RecordingTranscription?
     let configuration: RecordingConfiguration
     var status: RecordingStatus
-    /// Present only for entries created by the edit-selection shortcut.
-    /// `nil` for normal voice-transcription entries.
+    /// Legacy: present only on entries created by the edit-selection
+    /// shortcut, deleted in Phase 2. `nil` on every recording made since —
+    /// kept only so old history rows still decode and display.
     var editMode: RecordingEditMode?
     /// Present when the auto-cleanup pass ran on this recording. `nil`
     /// when auto-cleanup is off or skipped (empty transcript, error

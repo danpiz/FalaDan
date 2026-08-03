@@ -39,18 +39,16 @@ final class AppState: Sendable {
     var modelLoadState: ModelLoadState { modelLoader.state }
 
     /// True while the live-dictation cleanup pass is running (the LLM
-    /// polish step after transcription, before paste). Named for the
-    /// deleted edit-mode feature that used to share this flag; kept
-    /// under this name until the next task's rename. Used by the menu
+    /// polish step after transcription, before paste). Used by the menu
     /// bar icon + status text to render "Editing…" instead of the
     /// generic "Transcribing…" treatment.
-    var isEditModeProcessing = false
+    var isCleanupProcessing = false
 
     /// Character count of the text currently being run through cleanup.
     /// Used by the menu bar status text to surface scale for larger
     /// passes — only shown above a threshold (see
     /// `RecordingHeaderView.cleanupCharThreshold` in `MenuBarView`).
-    var editModeProcessingCharCount: Int = 0
+    var cleanupProcessingCharCount: Int = 0
 
     let maxRecordingDuration: TimeInterval = 600.0  // 10 minutes
     var warningDuration: TimeInterval { maxRecordingDuration * 0.8 }  // 8 minutes
@@ -353,14 +351,6 @@ final class AppState: Sendable {
 
     func reloadShortcuts() {
         CustomShortcutMonitor.shared.reloadShortcuts()
-    }
-
-    /// Which shortcuts are registered depends on which features are switched
-    /// on, so a settings change has to re-derive them. A shortcut for a
-    /// disabled feature must end up unregistered — that is what lets the chord
-    /// reach the focused app instead of being swallowed.
-    func refreshShortcutRegistrations() {
-        CustomShortcutMonitor.shared.refresh()
     }
 
 }

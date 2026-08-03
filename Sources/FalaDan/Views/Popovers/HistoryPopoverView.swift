@@ -331,10 +331,17 @@ private struct HistoryPopoverRow: View {
                 }
                 .disabled(isRetranscribeDisabled)
 
-                Button("Re-transcribe with cleanup") {
-                    appState.retranscribeAsNew(recording, applyCleanup: true)
+                // Hidden rather than merely disabled when cleanup isn't
+                // configured: `applyAutoCleanup`'s own guard would silently
+                // skip the call and hand back the raw transcript, so without
+                // this the menu item would appear to succeed and change
+                // nothing — a silent no-op is worse than an absent control.
+                if appState.envConfig.isCleanupConfigured {
+                    Button("Re-transcribe with cleanup") {
+                        appState.retranscribeAsNew(recording, applyCleanup: true)
+                    }
+                    .disabled(isRetranscribeDisabled)
                 }
-                .disabled(isRetranscribeDisabled)
             }
             Button("Show metadata") {
                 let metadataURL = recording.storageDirectory

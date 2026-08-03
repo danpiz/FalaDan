@@ -43,11 +43,11 @@ extension AppState {
         // Surface the LLM phase as "Editing…" in the menu bar so the icon
         // shifts off `waveform.badge.ellipsis` (transcribing) onto
         // `wand.and.stars` (editing) for the duration of the cleanup call.
-        isEditModeProcessing = true
-        editModeProcessingCharCount = rawText.count
+        isCleanupProcessing = true
+        cleanupProcessingCharCount = rawText.count
         defer {
-            isEditModeProcessing = false
-            editModeProcessingCharCount = 0
+            isCleanupProcessing = false
+            cleanupProcessingCharCount = 0
         }
 
         do {

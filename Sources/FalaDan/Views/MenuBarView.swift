@@ -134,7 +134,7 @@ private struct RecordingHeaderView: View {
         if !appState.permissions.allGranted {
             return "Permissions Required"
         }
-        if appState.isEditModeProcessing { return editingStatusText }
+        if appState.isCleanupProcessing { return editingStatusText }
         switch appState.recorder.state {
         case .idle:
             if appState.transcriptionMode == .custom
@@ -190,12 +190,19 @@ private struct RecordingHeaderView: View {
     /// surfaces the char count so the user knows why it might take a
     /// bit. Below it, the count is noise, so the status stays the plain
     /// "Editing…" treatment.
-    private static let cleanupCharThreshold = 30_000
+    ///
+    /// Recordings are capped at `AppState.maxRecordingDuration` (600s),
+    /// which tops out around 9k characters of transcript — so this has to
+    /// sit well under that to ever fire. 4,000 (roughly 4-5 minutes of
+    /// continuous speech) is reachable by a genuinely long dictation while
+    /// still keeping the char count reserved for the sessions long enough
+    /// to justify it, rather than showing on nearly every cleanup pass.
+    private static let cleanupCharThreshold = 4_000
 
     /// Surfaces the cleanup-pass size for larger transcripts so the user
     /// knows why it might take a bit.
     private var editingStatusText: String {
-        let count = appState.editModeProcessingCharCount
+        let count = appState.cleanupProcessingCharCount
         guard count >= Self.cleanupCharThreshold else {
             return "Editing..."
         }

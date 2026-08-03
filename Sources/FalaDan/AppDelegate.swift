@@ -23,6 +23,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         UNUserNotificationCenter.current().delegate = self
 
+        // One-time sweep of state stranded by the deleted edit-mode feature:
+        // a Keychain-stored API key with no code left to reach it, plus a
+        // handful of inert UserDefaults keys. Safe to call on every launch —
+        // it no-ops itself after the first run. See LegacyEditModeCleanup.
+        LegacyEditModeCleanup.runOnce()
+
         // Disable App Nap for reliable background operation
         appNapActivity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiatedAllowingIdleSystemSleep, .suddenTerminationDisabled],
@@ -154,7 +160,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         withObservationTracking {
             _ = self.appState.recorder.state
             _ = self.appState.recorder.meterLevel
-            _ = self.appState.isEditModeProcessing
+            _ = self.appState.isCleanupProcessing
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.updateIcon()
@@ -165,12 +171,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateIcon() {
         let isWorking =
-            appState.recorder.state == .processing || appState.isEditModeProcessing
+            appState.recorder.state == .processing || appState.isCleanupProcessing
         syncProcessingAnimation(active: isWorking)
         statusItem.button?.image = MenuBarIconRenderer.render(
             state: appState.recorder.state,
             meterLevel: appState.recorder.meterLevel,
-            isEditModeProcessing: appState.isEditModeProcessing,
+            isCleanupProcessing: appState.isCleanupProcessing,
             processingPhase: processingAnimationPhase
         )
     }
