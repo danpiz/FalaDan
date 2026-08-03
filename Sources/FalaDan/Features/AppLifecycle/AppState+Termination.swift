@@ -4,7 +4,6 @@ extension AppState {
     var needsTerminationCleanup: Bool {
         recorder.state.isRecording
             || recorder.state == .processing
-            || editModeContext != nil
             || isEditModeProcessing
             || durationCheckTimer != nil
             || captureTransitionInFlight
@@ -17,16 +16,6 @@ extension AppState {
         captureTransitionInFlight = false
         isEditModeProcessing = false
         editModeProcessingCharCount = 0
-
-        if let context = editModeContext {
-            editModeContext = nil
-            pasteboard.restoreSavedPasteboard(context.savedPasteboard)
-            await recorder.cancelRecording()
-            recordingStore.discard(id: context.recordingId)
-            recorder.reset()
-            currentRecordingId = nil
-            return
-        }
 
         pasteboard.restorePendingPasteboard()
 

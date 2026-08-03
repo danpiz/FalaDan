@@ -11,8 +11,6 @@ final class AppState: Sendable {
     let parakeet = ParakeetProvider()
     let whisper = WhisperProvider()
     let customProvider = CustomProvider()
-    let editModeProvider = EditModeProvider()
-    let customEditProvider = CustomEditProvider()
     let recordingStore = RecordingStore()
     let analyticsStore = AnalyticsStore()
     let permissions = PermissionsManager()
@@ -36,40 +34,23 @@ final class AppState: Sendable {
     var replacementSettings = ReplacementSettings.load()
     var transcriptionMode: TranscriptionMode = TranscriptionModeStorage.load()
     var customProviderSettings = CustomProviderSettings.load()
-    var customEditProviderSettings = CustomEditProviderSettings.load()
-    var editModeBehavior: EditModeBehavior = EditModeSettings.behavior
-
-    var selectionEnabled: Bool { editModeBehavior.selectionEnabled }
-    var autoCleanupEnabled: Bool { editModeBehavior.autoCleanupEnabled }
-    var voiceEditEnabled: Bool = EditModeSettings.voiceEdit
     var showMenuBarVisibilityHint = false
 
     var modelLoadState: ModelLoadState { modelLoader.state }
 
-    /// Set while a voice-edit recording is active. Holds the captured
-    /// selection + saved pasteboard so the second shortcut press can
-    /// transcribe the voice instruction and apply it to the selection.
-    /// When non-nil, the recorder is in `.recording` state but the
-    /// normal toggle/cancel handlers route to the edit-mode flow
-    /// instead of the standard transcribe-and-paste path.
-    var editModeContext: EditModeContext?
-
-    /// True while the edit-mode flow is in its post-recording phase
-    /// (transcribing the instruction + invoking the edit provider). Used
-    /// by the menu bar icon + status text to render edit-specific state
-    /// instead of the generic "Transcribing…" treatment.
+    /// True while the live-dictation cleanup pass is running (the LLM
+    /// polish step after transcription, before paste). Named for the
+    /// deleted edit-mode feature that used to share this flag; kept
+    /// under this name until the next task's rename. Used by the menu
+    /// bar icon + status text to render "Editing…" instead of the
+    /// generic "Transcribing…" treatment.
     var isEditModeProcessing = false
 
-    /// Character count of the current edit-mode selection. Used by the
-    /// menu bar status text to surface scale for larger edits — only
-    /// shown when above `EditModeProvider.softCharThreshold`.
+    /// Character count of the text currently being run through cleanup.
+    /// Used by the menu bar status text to surface scale for larger
+    /// passes — only shown above a threshold (see
+    /// `RecordingHeaderView.cleanupCharThreshold` in `MenuBarView`).
     var editModeProcessingCharCount: Int = 0
-
-    struct EditModeContext: Sendable {
-        let selectedText: String
-        let savedPasteboard: PasteboardService.SavedPasteboardContents?
-        let recordingId: String
-    }
 
     let maxRecordingDuration: TimeInterval = 600.0  // 10 minutes
     var warningDuration: TimeInterval { maxRecordingDuration * 0.8 }  // 8 minutes
@@ -92,11 +73,8 @@ final class AppState: Sendable {
             onRecordingEnded?()
             currentRecordingId = nil
             captureTransitionInFlight = false
-            if editModeContext == nil, let recordingId {
+            if let recordingId {
                 saveInterruptedRecording(interruption, recordingId: recordingId)
-            } else if let context = editModeContext {
-                editModeContext = nil
-                pasteboard.restoreSavedPasteboard(context.savedPasteboard)
             }
             toast.showError(title: "Recording Failed", message: interruption.message)
             recorder.reset()
@@ -186,11 +164,6 @@ final class AppState: Sendable {
     /// without a key to hold. The hotkey path is `beginHoldToTalk` /
     /// `endHoldToTalk` and no longer routes through here.
     func toggleRecording() {
-        // Edit-mode recording uses the same recorder. Don't let the normal
-        // toggle shortcut hijack it — the user has to press the edit
-        // shortcut again (or Esc) to end an edit recording.
-        if editModeContext != nil { return }
-
         if recorder.state.isRecording {
             stopAndTranscribe()
         } else {
@@ -201,8 +174,6 @@ final class AppState: Sendable {
     /// Hotkey pressed. Starts recording immediately — latency here is felt
     /// directly as clipped first syllables.
     func beginHoldToTalk() {
-        if editModeContext != nil { return }
-
         // A start already in flight — from `toggleRecording()` if a UI
         // affordance ever calls it again — owns the recording. Bail before
         // touching it. Checking `captureTransitionInFlight` as well as
@@ -239,8 +210,6 @@ final class AppState: Sendable {
         // into an unrelated later hold.
         let startedAt = holdToTalkStartedAt
         holdToTalkStartedAt = nil
-
-        if editModeContext != nil { return }
 
         let held = startedAt.map { ProcessInfo.processInfo.systemUptime - $0 }
         let decision = HoldToTalkPolicy.release(heldFor: held)
@@ -284,8 +253,6 @@ final class AppState: Sendable {
     /// navigated.
     func abortHoldToTalk() {
         holdToTalkStartedAt = nil
-
-        if editModeContext != nil { return }
 
         if recorder.state.isRecording {
             applyHoldRelease(.discard)
@@ -338,12 +305,6 @@ final class AppState: Sendable {
     }
 
     func cancelRecording() {
-        // Esc cancels whichever flow is active. Edit-mode cancel restores
-        // the saved pasteboard and bails without transcribing.
-        if editModeContext != nil {
-            cancelEditModeRecording()
-            return
-        }
         Task { await cancelRecordingFlow() }
     }
 

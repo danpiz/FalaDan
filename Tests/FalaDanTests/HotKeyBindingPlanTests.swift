@@ -74,14 +74,14 @@ struct HotKeyBindingPlanTests {
     /// same one works on every launch.
     @Test func tiesBetweenExactChordsGoToDeclarationOrder() {
         let requests = [
-            exact(.editSelection, kVK_ANSI_E, modifiers: UInt32(optionKey)),
+            exact(.cancelRecording, kVK_ANSI_E, modifiers: UInt32(optionKey)),
             exact(.toggleRecording, kVK_ANSI_E, modifiers: UInt32(optionKey)),
         ]
 
         let plan = HotKeyBindingPlan.resolve(requests)
 
         #expect(plan.bindings.map(\.name) == [.toggleRecording])
-        #expect(plan.shadowed.map(\.name) == [.editSelection])
+        #expect(plan.shadowed.map(\.name) == [.cancelRecording])
         #expect(HotKeyBindingPlan.resolve(requests.reversed()) == plan)
     }
 
@@ -100,10 +100,9 @@ struct HotKeyBindingPlanTests {
         let plan = HotKeyBindingPlan.resolve([
             exact(.toggleRecording, kVK_ANSI_W, modifiers: UInt32(optionKey)),
             exact(.cancelRecording, kVK_ANSI_R, modifiers: UInt32(optionKey)),
-            exact(.editSelection, kVK_ANSI_E, modifiers: UInt32(optionKey)),
         ])
 
-        #expect(plan.bindings.count == 3)
+        #expect(plan.bindings.count == 2)
         #expect(plan.shadowed.isEmpty)
     }
 

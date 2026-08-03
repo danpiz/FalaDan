@@ -8,7 +8,6 @@ protocol HotkeyManagerDelegate: AnyObject {
     nonisolated func hotkeyDidStopRecording()
     nonisolated func hotkeyDidAbortRecording()
     nonisolated func hotkeyDidCancelRecording()
-    nonisolated func hotkeyDidEditSelection()
 }
 
 @MainActor
@@ -25,7 +24,6 @@ final class HotkeyManager {
     func start() {
         setupHoldToTalkRecording()
         setupCancelRecording()
-        setupEditSelection()
         shortcutMonitor.start()
     }
 
@@ -97,22 +95,6 @@ final class HotkeyManager {
         }
         shortcutMonitor.onKeyUp(for: .cancelRecording) { [weak self] in
             self?.delegate?.hotkeyDidCancelRecording()
-        }
-    }
-
-    private func setupEditSelection() {
-        // Gate on the persisted setting so when edit mode is off, whatever the
-        // user bound passes through to the frontmost app instead of being
-        // consumed. Changing that setting must re-derive registrations so the
-        // hot key is actually dropped.
-        shortcutMonitor.setEnabledCheck(for: .editSelection) {
-            EditModeSettings.behavior.selectionEnabled
-        }
-        // Fire on keyUp so the user's modifier (e.g. ⌥) has been released
-        // before we synthesize ⌘C — otherwise the held modifier combines
-        // with the synthetic Cmd and the target app sees ⌥⌘C instead.
-        shortcutMonitor.onKeyUp(for: .editSelection) { [weak self] in
-            self?.delegate?.hotkeyDidEditSelection()
         }
     }
 }

@@ -184,7 +184,6 @@ private struct GeneralSettingsPage: View {
     @StateObject private var launchManager = LaunchAtLoginManager.shared
     @State private var autoUpdateEnabled = true
     @State private var vadEnabled = VADSettings.enabled
-    @State private var editModeBehavior = EditModeSettings.behavior
 
     var body: some View {
         @Bindable var appState = appState
@@ -235,49 +234,6 @@ private struct GeneralSettingsPage: View {
                 }
             }
 
-            Section("AI Editing") {
-                Picker(
-                    selection: Binding(
-                        get: { editModeBehavior },
-                        set: {
-                            editModeBehavior = $0
-                            EditModeSettings.behavior = $0
-                            appState.editModeBehavior = $0
-                            appState.refreshShortcutRegistrations()
-                        }
-                    )
-                ) {
-                    ForEach(EditModeBehavior.allCases, id: \.self) { behavior in
-                        Text(behavior.settingsDisplayName).tag(behavior)
-                    }
-                } label: {
-                    InfoLabel(
-                        title: "Enabled features",
-                        text: "Recording cleanup polishes dictated text before paste. Selected text editing rewrites highlighted text."
-                    )
-                }
-
-                if editModeBehavior.selectionEnabled {
-                    Picker(
-                        selection: Binding(
-                            get: { appState.voiceEditEnabled },
-                            set: {
-                                appState.voiceEditEnabled = $0
-                                EditModeSettings.voiceEdit = $0
-                            }
-                        )
-                    ) {
-                        Text("Clean automatically").tag(false)
-                        Text("Dictate instruction").tag(true)
-                    } label: {
-                        InfoLabel(
-                            title: "Selected text action",
-                            text: "Clean automatically rewrites selected text immediately. Dictate instruction lets you speak how to change it."
-                        )
-                    }
-                }
-            }
-
             Section("About") {
                 LabeledContent("Version", value: AppVersionInfo.current.displayString)
             }
@@ -291,7 +247,6 @@ private struct GeneralSettingsPage: View {
             launchManager.refresh()
             autoUpdateEnabled = updaterController?.automaticallyChecksForUpdates ?? true
             vadEnabled = VADSettings.enabled
-            editModeBehavior = EditModeSettings.behavior
         }
     }
 
@@ -464,7 +419,7 @@ private struct IntegrationSettingsPage: View {
                     )
                 }
 
-                if !appState.editModeBehavior.isOff {
+                if appState.envConfig.isCleanupConfigured {
                     CleanupPromptSettingsRow()
                 }
 
@@ -752,23 +707,11 @@ private struct CleanupPromptSettingsRow: View {
     }
 }
 
-private extension EditModeBehavior {
-    var settingsDisplayName: String {
-        switch self {
-        case .off: return "Off"
-        case .both: return "Both"
-        case .autoCleanup: return "Cleanup"
-        case .selection: return "Selection"
-        }
-    }
-}
-
 private extension CustomShortcutName {
     var settingsTitle: String {
         switch self {
         case .toggleRecording: return "Toggle Recording"
         case .cancelRecording: return "Cancel Recording"
-        case .editSelection: return "Edit Selection"
         }
     }
 
@@ -776,7 +719,6 @@ private extension CustomShortcutName {
         switch self {
         case .toggleRecording: return "Start or stop normal transcription"
         case .cancelRecording: return "Cancel the active recording"
-        case .editSelection: return "Edit selected text with AI"
         }
     }
 }

@@ -408,10 +408,4 @@ final class HotkeyDelegateImpl: HotkeyManagerDelegate {
             self.appState?.cancelRecording()
         }
     }
-
-    nonisolated func hotkeyDidEditSelection() {
-        Task { @MainActor in
-            self.appState?.editSelection()
-        }
-    }
 }
