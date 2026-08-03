@@ -8,7 +8,6 @@ protocol HotkeyManagerDelegate: AnyObject {
     nonisolated func hotkeyDidStopRecording()
     nonisolated func hotkeyDidAbortRecording()
     nonisolated func hotkeyDidCancelRecording()
-    nonisolated func hotkeyDidToggleAutoCleanupRecording()
     nonisolated func hotkeyDidEditSelection()
 }
 
@@ -26,7 +25,6 @@ final class HotkeyManager {
     func start() {
         setupHoldToTalkRecording()
         setupCancelRecording()
-        setupAutoCleanupRecording()
         setupEditSelection()
         shortcutMonitor.start()
     }
@@ -99,19 +97,6 @@ final class HotkeyManager {
         }
         shortcutMonitor.onKeyUp(for: .cancelRecording) { [weak self] in
             self?.delegate?.hotkeyDidCancelRecording()
-        }
-    }
-
-    private func setupAutoCleanupRecording() {
-        // Gate on the AI Editing setting so the shortcut passes through to the
-        // frontmost app when auto-cleanup isn't enabled. Changing that setting
-        // must re-derive registrations, or the hot key stays registered and
-        // keeps swallowing the chord. Mirrors editSelection's pattern.
-        shortcutMonitor.setEnabledCheck(for: .autoCleanupRecording) {
-            EditModeSettings.behavior.autoCleanupEnabled
-        }
-        shortcutMonitor.onKeyDown(for: .autoCleanupRecording) { [weak self] in
-            self?.delegate?.hotkeyDidToggleAutoCleanupRecording()
         }
     }
 

@@ -6,10 +6,10 @@ import Testing
 /// Abort-handler resolution.
 ///
 /// One line in `getAbortHandler` decides whether a shortcut that never opted
-/// into the distinction keeps its old behavior. `cancelRecording`,
-/// `autoCleanupRecording`, and `editSelection` all rely on that fallback, and a
-/// regression there would change what they do when a press is retired rather
-/// than released — silently, since nothing else asserts it.
+/// into the distinction keeps its old behavior. `cancelRecording` and
+/// `editSelection` both rely on that fallback, and a regression there would
+/// change what they do when a press is retired rather than released —
+/// silently, since nothing else asserts it.
 struct ShortcutHandlerRegistryTests {
     @Test func abortFallsBackToTheKeyUpHandlerWhenNoAbortHandlerIsRegistered() {
         let registry = ShortcutHandlerRegistry()
@@ -43,6 +43,6 @@ struct ShortcutHandlerRegistryTests {
         let registry = ShortcutHandlerRegistry()
         registry.setAbortHandler(for: .toggleRecording) {}
 
-        #expect(registry.getAbortHandler(for: .autoCleanupRecording) == nil)
+        #expect(registry.getAbortHandler(for: .editSelection) == nil)
     }
 }

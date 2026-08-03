@@ -409,12 +409,6 @@ final class HotkeyDelegateImpl: HotkeyManagerDelegate {
         }
     }
 
-    nonisolated func hotkeyDidToggleAutoCleanupRecording() {
-        Task { @MainActor in
-            self.appState?.toggleAutoCleanupRecording()
-        }
-    }
-
     nonisolated func hotkeyDidEditSelection() {
         Task { @MainActor in
             self.appState?.editSelection()

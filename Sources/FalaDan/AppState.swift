@@ -54,11 +54,6 @@ final class AppState: Sendable {
     /// instead of the standard transcribe-and-paste path.
     var editModeContext: EditModeContext?
 
-    /// True when the active recording was started via the Auto-Cleanup
-    /// shortcut. Read at transcription time to decide whether to run
-    /// the LLM cleanup pass; reset on stop, cancel, and error.
-    var cleanupRequestedForCurrentRecording: Bool = false
-
     /// True while the edit-mode flow is in its post-recording phase
     /// (transcribing the instruction + invoking the edit provider). Used
     /// by the menu bar icon + status text to render edit-specific state
@@ -97,7 +92,6 @@ final class AppState: Sendable {
             onRecordingEnded?()
             currentRecordingId = nil
             captureTransitionInFlight = false
-            cleanupRequestedForCurrentRecording = false
             if editModeContext == nil, let recordingId {
                 saveInterruptedRecording(interruption, recordingId: recordingId)
             } else if let context = editModeContext {
@@ -200,7 +194,6 @@ final class AppState: Sendable {
         if recorder.state.isRecording {
             stopAndTranscribe()
         } else {
-            cleanupRequestedForCurrentRecording = false
             startRecording()
         }
     }
@@ -210,15 +203,12 @@ final class AppState: Sendable {
     func beginHoldToTalk() {
         if editModeContext != nil { return }
 
-        // A start already in flight — from the auto-cleanup shortcut, or from
-        // `toggleRecording()` if a UI affordance ever calls it again — owns both
-        // the recording and its cleanup intent. Bail before
-        // touching either. Checking `captureTransitionInFlight` as well as
+        // A start already in flight — from `toggleRecording()` if a UI
+        // affordance ever calls it again — owns the recording. Bail before
+        // touching it. Checking `captureTransitionInFlight` as well as
         // `isRecording` matters because the gap between them is exactly the
         // CoreAudio device-open window: during it a recording is being started
-        // but does not yet report itself as recording, and clearing
-        // `cleanupRequestedForCurrentRecording` there would silently disable the
-        // cleanup pass on someone else's recording.
+        // but does not yet report itself as recording.
         guard !recorder.state.isRecording, !captureTransitionInFlight else { return }
 
         // Below the guard, deliberately. A press that bails above must not
@@ -230,7 +220,6 @@ final class AppState: Sendable {
 
         holdToTalkStartedAt = ProcessInfo.processInfo.systemUptime
         holdToTalkStartInFlight = true
-        cleanupRequestedForCurrentRecording = false
         startRecording()
     }
 
@@ -338,21 +327,6 @@ final class AppState: Sendable {
     func endHoldToTalkStartWindow() {
         holdToTalkStartInFlight = false
         pendingHoldRelease = nil
-    }
-
-    /// Auto-cleanup recording shortcut: starts/stops a normal recording
-    /// but flags it so the LLM cleanup pass runs on the transcript
-    /// before insertion. Pressing this while another recording is in
-    /// flight just stops it — the cleanup intent is fixed at start time.
-    func toggleAutoCleanupRecording() {
-        if editModeContext != nil { return }
-
-        if recorder.state.isRecording {
-            stopAndTranscribe()
-        } else {
-            cleanupRequestedForCurrentRecording = true
-            startRecording()
-        }
     }
 
     func startRecording() {

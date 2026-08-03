@@ -99,7 +99,7 @@ struct HotKeyBindingPlanTests {
     @Test func unrelatedShortcutsAllSurvive() {
         let plan = HotKeyBindingPlan.resolve([
             exact(.toggleRecording, kVK_ANSI_W, modifiers: UInt32(optionKey)),
-            exact(.autoCleanupRecording, kVK_ANSI_R, modifiers: UInt32(optionKey)),
+            exact(.cancelRecording, kVK_ANSI_R, modifiers: UInt32(optionKey)),
             exact(.editSelection, kVK_ANSI_E, modifiers: UInt32(optionKey)),
         ])
 

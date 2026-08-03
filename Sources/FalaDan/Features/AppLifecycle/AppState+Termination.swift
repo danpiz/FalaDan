@@ -14,7 +14,6 @@ extension AppState {
         stopDurationChecks()
         permissions.stopPolling()
         onRecordingEnded?()
-        cleanupRequestedForCurrentRecording = false
         captureTransitionInFlight = false
         isEditModeProcessing = false
         editModeProcessingCharCount = 0

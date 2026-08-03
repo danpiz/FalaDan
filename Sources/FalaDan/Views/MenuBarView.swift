@@ -381,10 +381,6 @@ private struct ShortcutSection: View {
 
             ShortcutRow(label: "Toggle Recording", name: .toggleRecording)
 
-            if appState.autoCleanupEnabled {
-                ShortcutRow(label: "Cleanup Recording", name: .autoCleanupRecording)
-            }
-
             if appState.selectionEnabled {
                 ShortcutRow(label: "Edit Selection", name: .editSelection)
             }

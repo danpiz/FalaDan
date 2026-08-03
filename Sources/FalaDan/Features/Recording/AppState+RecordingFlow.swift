@@ -126,13 +126,12 @@ extension AppState {
         let recordingId = currentRecordingId ?? Recording.generateId()
         currentRecordingId = nil
 
-        // Cleanup now runs on every dictation rather than behind a second
-        // shortcut, so this is read from config rather than from what the user
-        // pressed. `isCleanupConfigured` is what keeps an unconfigured install
-        // working: with no key set, the call is skipped and the raw transcript
-        // is pasted, exactly as it was before this phase.
+        // Cleanup now runs on every dictation, so this is read from config
+        // rather than from what the user pressed. `isCleanupConfigured` is
+        // what keeps an unconfigured install working: with no key set, the
+        // call is skipped and the raw transcript is pasted, exactly as it
+        // was before this phase.
         let applyCleanup = envConfig.isCleanupConfigured
-        cleanupRequestedForCurrentRecording = false
 
         await transcribe(
             audioURL: audioURL,
@@ -213,7 +212,6 @@ extension AppState {
 
         guard recorder.state.isRecording else { return }
 
-        cleanupRequestedForCurrentRecording = false
         stopDurationChecks()
         onRecordingEnded?()
 
@@ -235,7 +233,6 @@ extension AppState {
 
         guard recorder.state.isRecording else { return }
 
-        cleanupRequestedForCurrentRecording = false
         stopDurationChecks()
         onRecordingEnded?()
 

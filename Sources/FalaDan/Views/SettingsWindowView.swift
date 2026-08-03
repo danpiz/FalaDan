@@ -768,7 +768,6 @@ private extension CustomShortcutName {
         switch self {
         case .toggleRecording: return "Toggle Recording"
         case .cancelRecording: return "Cancel Recording"
-        case .autoCleanupRecording: return "Cleanup Recording"
         case .editSelection: return "Edit Selection"
         }
     }
@@ -777,7 +776,6 @@ private extension CustomShortcutName {
         switch self {
         case .toggleRecording: return "Start or stop normal transcription"
         case .cancelRecording: return "Cancel the active recording"
-        case .autoCleanupRecording: return "Record and run AI cleanup before paste"
         case .editSelection: return "Edit selected text with AI"
         }
     }
