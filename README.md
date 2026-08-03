@@ -40,22 +40,44 @@ ad-hoc signing on every `just dev` — see [Troubleshooting](#troubleshooting).
 - **Recording history** — browse and copy recent transcriptions
 - **Usage stats** — track recordings, speaking time, word count, and average WPM
 - **Multiple models** — switch between the default fast model (Parakeet: English + 20 European
-  languages) and multilingual auto-detect (whisper.cpp)
+  languages), multilingual auto-detect (whisper.cpp), and a custom OpenAI-compatible
+  transcription endpoint
 - **Optional LLM cleanup** — removes fillers, fixes homophones and punctuation, and applies
   spoken corrections like "scratch that", on every dictation
-- **On-device transcription** — audio never leaves your Mac. If LLM cleanup is configured, the
-  transcript *text* is sent to the provider you configured for cleanup; with no `.env` at all,
-  nothing leaves the machine and FalaDan runs fully offline
+- **On-device transcription** — with Parakeet or whisper.cpp, audio never leaves your Mac
+
+### What leaves your machine
+
+Nothing, by default. Two things change that, and both are opt-in:
+
+- **LLM cleanup**, if you configure it in `.env`, sends the transcript *text* — never the
+  audio — to the provider you named.
+- **Custom transcription mode**, if you select it in the model picker, uploads the **audio
+  itself** to the endpoint you configured. The other two transcription models are local.
+
+With no `.env` and the default model, FalaDan makes no network calls at all.
 
 ## Configuration
 
 FalaDan reads settings from a `.env` file at
-`~/Library/Application Support/FalaDan/.env` (falling back to a repo-root `.env` in
-development). It's parsed once at launch — there is no settings UI for it, and it is never
-committed. Copy `.env.example` to get started:
+`~/Library/Application Support/FalaDan/.env`. It's parsed once at launch — there is no settings
+UI for it, and it is never committed. Copy `.env.example` to get started:
 
 ```bash
+mkdir -p "$HOME/Library/Application Support/FalaDan"
 cp .env.example "$HOME/Library/Application Support/FalaDan/.env"
+```
+
+A `.env` in the current working directory is also read, as a second choice. That is only useful
+when you launch the binary directly from a checkout — `just dev` installs to `/Applications` and
+launches with `open`, so the working directory is `/` and a repo-root `.env` is *not* picked up.
+Use the path above.
+
+Changing `.env` takes effect on the next launch. To confirm what was loaded — the key is
+redacted:
+
+```bash
+log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
 ```
 
 Everything in it is optional. With no `.env` at all, FalaDan runs fully offline and pastes the
