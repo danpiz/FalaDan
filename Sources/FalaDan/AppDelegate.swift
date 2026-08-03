@@ -44,8 +44,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // silently by design — a failed call pastes the raw transcript with no
         // toast — so without this line "cleanup isn't running" and "cleanup ran
         // and the model returned the same text" look identical from the outside.
-        // The key is redacted by `EnvConfig.description`, which is what makes it
-        // safe to mark public; nothing else here is a secret.
+        // Safe to mark public because `EnvConfig.description` redacts every field
+        // that could hold a credential — not just the key field, since the
+        // realistic slip is a key pasted into the wrong line of `.env`.
         log.info("Loaded config: \(appState.envConfig, privacy: .public)")
 
         setupStatusItem()

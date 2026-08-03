@@ -75,32 +75,63 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
 
     /// Blanks a value that looks like an API key rather than a model id.
     ///
-    /// Matched on prefix, which covers the providers this app documents, plus a
-    /// length backstop for the ones it does not: model ids are human-readable and
-    /// short (`llama-3.3-70b-versatile` is 23 characters), and nothing legitimate
-    /// runs to 40 unbroken non-space characters.
+    /// Matched on prefix for the providers this app documents, plus a backstop
+    /// for the ones it does not. The backstop is the length of the longest
+    /// *unbroken* alphanumeric run, not the length of the value: keys are one
+    /// long opaque run (`gsk_` and then 52 characters of base62), while model
+    /// ids are words joined by separators, so even the longest of them
+    /// (`meta-llama/llama-4-maverick-17b-128e-instruct`, 45 characters) has no
+    /// run past `maverick`.
+    ///
+    /// Total length was the obvious rule and the wrong one — it redacted real
+    /// Groq, OpenRouter and Ollama ids, which is worse than useless: this string
+    /// exists to answer "which model did it load", and it went blank for exactly
+    /// the long ids most likely to be mistyped.
     static func redactingSecretShape(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let prefixes = ["sk-", "sk_", "gsk_", "xai-", "AIza", "Bearer "]
         if prefixes.contains(where: { trimmed.hasPrefix($0) }) { return "<redacted>" }
-        if trimmed.count >= 40, !trimmed.contains(" ") { return "<redacted>" }
+
+        var run = 0
+        var longestRun = 0
+        for character in trimmed {
+            if character.isLetter || character.isNumber {
+                run += 1
+                longestRun = max(longestRun, run)
+            } else {
+                run = 0
+            }
+        }
+        if longestRun >= 25 { return "<redacted>" }
         return value
     }
 
-    /// Strips the query string and any user-info component from a URL.
+    /// Strips credentials a URL can carry, then applies the key-shape check to
+    /// what is left.
     ///
     /// Some providers take the key as `?api_key=`, and a URL can carry
     /// `https://user:secret@host`. Neither is how this app authenticates — it
     /// sends a bearer header — but the base URL is whatever the user typed.
+    ///
+    /// The shape check has to run on the success path, not only when parsing
+    /// fails. `URLComponents(string:)` *succeeds* on a bare API key — it parses
+    /// as a relative path — so a key pasted into `LLM_BASE_URL=` never reached
+    /// the fallback. That is the likelier mis-paste of the two: in
+    /// `.env.example`, `LLM_BASE_URL=` sits directly above `LLM_API_KEY=`.
     static func redactingCredentials(in urlString: String) -> String {
         guard var components = URLComponents(string: urlString) else {
             return redactingSecretShape(urlString)
         }
-        let hadSecret = components.query != nil || components.password != nil
+        let hadSecret =
+            components.query != nil || components.password != nil
+            || components.user != nil || components.fragment != nil
         components.query = nil
+        components.fragment = nil
         components.user = nil
         components.password = nil
         guard let stripped = components.string else { return "<redacted>" }
+        let checked = redactingSecretShape(stripped)
+        guard checked == stripped else { return checked }
         return hadSecret ? stripped + "<redacted-query>" : stripped
     }
 

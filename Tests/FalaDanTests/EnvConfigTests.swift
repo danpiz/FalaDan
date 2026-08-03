@@ -217,14 +217,43 @@ struct EnvConfigRedactionTests {
 
     /// Real model ids must survive — a redacted one makes the log line useless
     /// for the thing it exists to diagnose.
+    ///
+    /// The long slash-separated ids are the point of this test, not padding. A
+    /// total-length rule redacted every one of them, and they are the ids most
+    /// worth being able to read back: the short ones are hard to mistype.
     @Test func descriptionKeepsOrdinaryModelIds() {
         for model in [
             "llama-3.3-70b-versatile", "gemini-3.6-flash", "openai/gpt-oss-20b",
             "qwen/qwen3.6-27b", "gpt-4o-mini", "llama3.2",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "meta-llama/llama-4-maverick-17b-128e-instruct",
+            "mistralai/mistral-small-3.2-24b-instruct-2506",
+            "nousresearch/hermes-3-llama-3.1-405b:extended",
+            "hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M",
+            "accounts/fireworks/models/llama-v3p1-405b-instruct",
         ] {
             var c = EnvConfig.defaults
             c.llmModel = model
             #expect(c.description.contains(model), "over-redacted: \(model)")
+        }
+    }
+
+    /// `LLM_BASE_URL=` sits directly above `LLM_API_KEY=` in `.env.example`, so
+    /// it is at least as likely a mis-paste target as the model field.
+    ///
+    /// `URLComponents(string:)` succeeds on a bare key — it parses as a relative
+    /// path — so this cannot be left to the parse-failure branch.
+    @Test func descriptionRedactsAKeyPastedIntoTheBaseURLField() {
+        for stray in [
+            "gsk_" + String(repeating: "a1B2c3D4", count: 6),
+            "sk-proj-" + String(repeating: "Xy9Z", count: 10),
+            "AIzaSyD" + String(repeating: "k3J", count: 11),
+            "sk-or-v1-" + String(repeating: "9f", count: 32),
+            "xai-" + String(repeating: "Qw7", count: 16),
+        ] {
+            var c = EnvConfig.defaults
+            c.llmBaseURL = stray
+            #expect(!c.description.contains(stray), "leaked base URL value")
         }
     }
 

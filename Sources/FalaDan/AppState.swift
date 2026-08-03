@@ -332,8 +332,12 @@ final class AppState: Sendable {
     /// same flag, and the second flow then bails at the guard with its window
     /// left open.
     ///
-    /// That is safe, but not for the reason it looks: the flag being set means a
-    /// flow is already running, and *that* flow's `defer` clears the window. The
+    /// That is safe, but not for the reason it looks: reaching that guard means a
+    /// `startRecordingFlow` is already running, and *its* `defer` clears the
+    /// window. (Only `startRecordingFlow` clears it — the stop, discard and
+    /// cancel flows set the same flag but do not. They cannot strand a window
+    /// either, since one can only open while the flag is clear, so any of them
+    /// is necessarily enqueued behind the start flow that opened it.) The
     /// second press's release is applied to the first press's recording — correct
     /// either way, since the user did release the key.
     ///

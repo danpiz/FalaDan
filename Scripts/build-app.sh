@@ -24,7 +24,11 @@ if [[ "$BUILD_CONFIG" == "debug" ]]; then
 else
     BUNDLE_ID="$BUNDLE_ID_RELEASE"
     DISPLAY_NAME="FalaDan"
-    FEED_URL="https://raw.githubusercontent.com/andyhtran/FalaDan/main/appcast.xml"
+    # Must be a repo Dan controls. This read `andyhtran/FalaDan` — the upstream
+    # author's account, under FalaDan's name — so a signed release would have
+    # polled an appcast someone else owns, and Sparkle installs what an appcast
+    # points at. Inert only because no release has been published.
+    FEED_URL="https://raw.githubusercontent.com/danpiz/FalaDan/main/appcast.xml"
     AUTO_CHECKS=true
 fi
 

@@ -63,8 +63,8 @@ FalaDan does make network requests that carry none of your content:
 - **Update checks**, in signed release builds only. `just dev` builds have the update feed
   disabled.
 
-So: after the first launch has fetched a model, a default install with no `.env` sends nothing
-further.
+So: once a model is cached, a `just dev` build with no `.env` makes no further requests at all,
+and a signed release build makes only the update check.
 
 ## Configuration
 
@@ -89,8 +89,8 @@ redacted, as is anything key-shaped that ended up in another field:
 log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
 ```
 
-Everything in it is optional. With no `.env` at all, FalaDan runs fully offline and pastes the
-raw transcript.
+Everything in it is optional. With no `.env` at all, FalaDan pastes the raw transcript and makes
+no cleanup call — see [What leaves your machine](#what-leaves-your-machine).
 
 | Key | Default | Notes |
 |---|---|---|
