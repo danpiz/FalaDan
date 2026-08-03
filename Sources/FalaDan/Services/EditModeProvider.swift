@@ -1,16 +1,15 @@
 import Foundation
 
-/// Edit-mode backend that posts to the Anthropic / Codex inference
-/// endpoints using the OAuth tokens managed by the user's installed
-/// Claude Code / Codex CLIs. Reads tokens from the user's keychain
-/// (Anthropic) or `~/.codex/auth.json` (Codex), makes the HTTP call,
-/// and on a 401 triggers the CLI to refresh its own token by spawning
-/// it briefly, then re-reads and retries once.
+/// Edit-mode backend for the `.gpt5Mini` / `.claudeHaiku45` model choices.
 ///
-/// We never refresh the token chain ourselves — Anthropic rotates
-/// refresh tokens on every use, so a write from us would invalidate
-/// the CLI's stored copy. The CLIs own the refresh state machine
-/// end-to-end; we only read the latest tokens they've persisted.
+/// These used to post to the Anthropic / Codex inference endpoints using
+/// tokens borrowed from the user's installed Claude Code / Codex CLIs,
+/// impersonating those tools to get past the edge's identity checks. That
+/// credential-reuse path has been deleted (Phase 2) and nothing has
+/// replaced it — direct API access needs a key the user owns, which this
+/// class does not have. Both model choices now fail with a clear error
+/// pointing at `.custom` (`CustomEditProvider`), which posts to a
+/// user-supplied endpoint with the user's own key and is unaffected.
 @MainActor
 final class EditModeProvider: Sendable {
     /// Selections above this size still proceed but the menu-bar status
@@ -44,109 +43,23 @@ final class EditModeProvider: Sendable {
         """
     }
 
+    enum Error: LocalizedError {
+        case backendRemoved(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .backendRemoved(let model):
+                return
+                    "\(model) used to run on credentials borrowed from another app's login — FalaDan no longer does that. Switch the edit model to Custom and supply your own API key."
+            }
+        }
+    }
+
     func editText(
         instruction: String,
         selection: String,
         model: EditModeModel
     ) async throws -> String {
-        let userPrompt = """
-            [Spoken instruction (transcribed):]
-            \(instruction)
-
-            ---
-
-            [Text to edit:]
-            \(selection)
-            """
-        return try await invoke(
-            model: model,
-            systemPrompt: Self.systemPrompt,
-            userPrompt: userPrompt
-        )
-    }
-
-    func cleanupTranscript(
-        _ transcript: String,
-        model: EditModeModel
-    ) async throws -> String {
-        try await invoke(
-            model: model,
-            systemPrompt: CleanupPromptStore.loadOrDefault(),
-            userPrompt: Self.cleanupUserPrompt(transcript: transcript)
-        )
-    }
-
-    // MARK: - Dispatch
-
-    private func invoke(
-        model: EditModeModel,
-        systemPrompt: String,
-        userPrompt: String
-    ) async throws -> String {
-        switch model.oauthProvider {
-        case "anthropic":
-            return try await invokeAnthropic(
-                model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
-        case "openai-codex":
-            return try await invokeCodex(
-                model: model, systemPrompt: systemPrompt, userPrompt: userPrompt)
-        default:
-            throw OAuthApiClient.Error.unsupportedProvider(model.rawValue)
-        }
-    }
-
-    private func invokeAnthropic(
-        model: EditModeModel,
-        systemPrompt: String,
-        userPrompt: String
-    ) async throws -> String {
-        var creds = try OAuthCredentialStore.anthropic()
-        do {
-            return try await OAuthApiClient.sendAnthropic(
-                accessToken: creds.accessToken,
-                model: model.rawValue,
-                systemPrompt: systemPrompt,
-                userText: userPrompt
-            )
-        } catch OAuthApiClient.Error.unauthorized {
-            // Stale access token — refresh via the CLI, re-read, retry once.
-            try await OAuthRefreshTrigger.anthropic()
-            creds = try OAuthCredentialStore.anthropic()
-            return try await OAuthApiClient.sendAnthropic(
-                accessToken: creds.accessToken,
-                model: model.rawValue,
-                systemPrompt: systemPrompt,
-                userText: userPrompt
-            )
-        }
-    }
-
-    private func invokeCodex(
-        model: EditModeModel,
-        systemPrompt: String,
-        userPrompt: String
-    ) async throws -> String {
-        var creds = try OAuthCredentialStore.openAICodex()
-        do {
-            return try await OAuthApiClient.sendCodex(
-                accessToken: creds.accessToken,
-                accountId: creds.accountId,
-                model: model.rawValue,
-                systemPrompt: systemPrompt,
-                userText: userPrompt,
-                reasoningEffort: model.reasoningEffort
-            )
-        } catch OAuthApiClient.Error.unauthorized {
-            try await OAuthRefreshTrigger.codex()
-            creds = try OAuthCredentialStore.openAICodex()
-            return try await OAuthApiClient.sendCodex(
-                accessToken: creds.accessToken,
-                accountId: creds.accountId,
-                model: model.rawValue,
-                systemPrompt: systemPrompt,
-                userText: userPrompt,
-                reasoningEffort: model.reasoningEffort
-            )
-        }
+        throw Error.backendRemoved(model.rawValue)
     }
 }
