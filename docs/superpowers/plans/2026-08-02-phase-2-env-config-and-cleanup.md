@@ -955,6 +955,8 @@ CleanupPromptStore stays: it holds the system prompt CleanupClient uses."
 - Modify: `Sources/FalaDan/Views/MenuBarIcon.swift` — the `isEditModeProcessing` parameter
 - Modify: `Sources/FalaDan/Views/MenuBarView.swift`, `SettingsWindowView.swift`, `Popovers/SettingsPopoverView.swift`, `ModelPickerView.swift` — remove any remaining AI-Editing UI
 - Modify: `Sources/FalaDan/Views/Popovers/HistoryPopoverView.swift` — Step 2b
+- Modify: `Sources/FalaDan/AppState.swift` — delete the now-dead `autoCleanupEnabled` getter
+  (its only reader was the shortcut row Task 4 removed; found by Task 4's review)
 
 **Note:** the flag is **renamed, not deleted**. It drives the menu bar's working indicator; deleting it removes the only signal that cleanup is running.
 
