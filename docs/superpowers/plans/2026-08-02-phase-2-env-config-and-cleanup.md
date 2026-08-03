@@ -150,6 +150,15 @@ struct EnvConfigParsingTests {
     @Test func anUnrecognisedCleanupValueLeavesItEnabled() {
         #expect(EnvConfig.parse("LLM_CLEANUP=maybe").llmCleanupEnabled == true)
     }
+
+    /// A .env saved with Windows line endings must still parse — the trailing
+    /// \r would otherwise make every key miss its case, silently yielding
+    /// defaults with no error surfaced.
+    @Test func handlesCarriageReturnLineEndings() {
+        let config = EnvConfig.parse("LLM_MODEL=crlf\r\nMIN_HOLD_MS=200\r\n")
+        #expect(config.llmModel == "crlf")
+        #expect(config.minHoldMS == 200)
+    }
 }
 
 /// Whether the cleanup call should be attempted at all. This is the single
@@ -185,6 +194,20 @@ struct EnvConfigCleanupGateTests {
     /// .env must not count as configuration.
     @Test func blankValuesDoNotCountAsConfigured() {
         #expect(!EnvConfig.parse("LLM_API_KEY=\nLLM_MODEL=m").isCleanupConfigured)
+    }
+
+    /// Set directly rather than through `parse()`, which trims. The guard has to
+    /// hold on its own: the settings UI feeds these fields when a `.env` key is
+    /// absent, and those values are not guaranteed trimmed.
+    @Test func whitespaceOnlyValuesDoNotCountAsConfigured() {
+        var c = EnvConfig.defaults
+        c.llmAPIKey = "   "
+        c.llmModel = "m"
+        #expect(!c.isCleanupConfigured)
+
+        c.llmAPIKey = "k"
+        c.llmModel = "\t "
+        #expect(!c.isCleanupConfigured)
     }
 }
 
@@ -256,10 +279,16 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     /// thing standing between an unconfigured install and a failing network call
     /// per utterance — and it is what keeps the app fully offline when no key is
     /// set.
+    /// Trims inside the guard rather than trusting the caller. `parse()` already
+    /// trims, but the settings UI feeds these same fields when a `.env` key is
+    /// absent, and a whitespace-only value from a text field must not read as
+    /// configured.
     var isCleanupConfigured: Bool {
         guard llmCleanupEnabled else { return false }
-        guard let key = llmAPIKey, !key.isEmpty else { return false }
-        guard let model = llmModel, !model.isEmpty else { return false }
+        guard let key = llmAPIKey?.trimmingCharacters(in: .whitespaces), !key.isEmpty
+        else { return false }
+        guard let model = llmModel?.trimmingCharacters(in: .whitespaces), !model.isEmpty
+        else { return false }
         return true
     }
 
@@ -310,7 +339,11 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
         var config = defaults
 
         for rawLine in contents.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            // `.whitespacesAndNewlines`, not `.whitespaces`: a file saved with
+            // CRLF endings leaves a trailing \r on every line after splitting on
+            // \n, and "LLM_MODEL\r" matches no case below — so the whole file
+            // would parse to defaults, silently and with no error.
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("#") { continue }
 
             // First separator only: a value may legitimately contain '='.
