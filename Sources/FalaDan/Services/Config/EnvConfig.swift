@@ -42,8 +42,10 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     /// set.
     var isCleanupConfigured: Bool {
         guard llmCleanupEnabled else { return false }
-        guard let key = llmAPIKey, !key.isEmpty else { return false }
-        guard let model = llmModel, !model.isEmpty else { return false }
+        guard let key = llmAPIKey?.trimmingCharacters(in: .whitespaces), !key.isEmpty
+        else { return false }
+        guard let model = llmModel?.trimmingCharacters(in: .whitespaces), !model.isEmpty
+        else { return false }
         return true
     }
 
@@ -94,15 +96,15 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
         var config = defaults
 
         for rawLine in contents.split(separator: "\n", omittingEmptySubsequences: false) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty || line.hasPrefix("#") { continue }
 
             // First separator only: a value may legitimately contain '='.
             guard let separator = line.firstIndex(of: "=") else { continue }
-            let key = line[line.startIndex..<separator].trimmingCharacters(in: .whitespaces)
+            let key = line[line.startIndex..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
             if key.isEmpty { continue }
             let value = unquote(
-                line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces))
+                line[line.index(after: separator)...].trimmingCharacters(in: .whitespacesAndNewlines))
 
             switch key {
             case "LLM_BASE_URL": if !value.isEmpty { config.llmBaseURL = value }

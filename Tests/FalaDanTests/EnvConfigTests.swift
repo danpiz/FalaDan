@@ -102,6 +102,14 @@ struct EnvConfigParsingTests {
     @Test func anUnrecognisedCleanupValueLeavesItEnabled() {
         #expect(EnvConfig.parse("LLM_CLEANUP=maybe").llmCleanupEnabled == true)
     }
+
+    /// A .env saved with Windows line endings must still parse — the trailing
+    /// \r would otherwise make every key miss its case and silently yield
+    /// defaults.
+    @Test func handlesCarriageReturnLineEndings() {
+        #expect(EnvConfig.parse("LLM_MODEL=crlf\r\n").llmModel == "crlf")
+        #expect(EnvConfig.parse("MIN_HOLD_MS=200\r\n").minHoldMS == 200)
+    }
 }
 
 /// Whether the cleanup call should be attempted at all. This is the single
@@ -137,6 +145,20 @@ struct EnvConfigCleanupGateTests {
     /// .env must not count as configuration.
     @Test func blankValuesDoNotCountAsConfigured() {
         #expect(!EnvConfig.parse("LLM_API_KEY=\nLLM_MODEL=m").isCleanupConfigured)
+    }
+
+    /// Set directly rather than through `parse()`, which trims. The guard has to
+    /// hold on its own: settings-UI values reach these fields without going
+    /// through the parser.
+    @Test func whitespaceOnlyValuesDoNotCountAsConfigured() {
+        var c = EnvConfig.defaults
+        c.llmAPIKey = "   "
+        c.llmModel = "m"
+        #expect(!c.isCleanupConfigured)
+
+        c.llmAPIKey = "k"
+        c.llmModel = "\t "
+        #expect(!c.isCleanupConfigured)
     }
 }
 
