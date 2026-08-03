@@ -155,4 +155,29 @@ struct CleanupClientReasoningTests {
         let raw = "I think we should ship on Wednesday."
         #expect(try CleanupClient.parseResponse(body(raw)) == raw)
     }
+
+    /// Lowercasing is not length-preserving, and these are the characters that
+    /// prove it: `İ` (U+0130) grows from two UTF-8 bytes to three, `ẞ` (U+1E9E)
+    /// shrinks from three to two.
+    ///
+    /// An earlier version searched a lowercased *copy* and applied the resulting
+    /// indices to the original. Every offset past such a character was wrong by
+    /// the difference, so the strip cut in the wrong place — silently eating
+    /// leading characters of the answer, and out of bounds it traps, taking the
+    /// app down on the paste path.
+    ///
+    /// Not exotic input: a reasoning model echoes the user's transcript back
+    /// inside its own `<think>` block (the qwen fixture does exactly that), so
+    /// dictating a Turkish or German proper noun is enough to reach it.
+    @Test func handlesCharactersWhoseLowercaseChangesByteLength() throws {
+        let turkish = "<think>İstanbul analysis here</think>The meeting is at 4pm."
+        #expect(try CleanupClient.parseResponse(body(turkish)) == "The meeting is at 4pm.")
+
+        let german = "<think>ẞ</think>éclair answer"
+        #expect(try CleanupClient.parseResponse(body(german)) == "éclair answer")
+
+        // The shifting character ahead of the tag rather than inside it.
+        let before = "İ<think>x</think>Answer."
+        #expect(try CleanupClient.parseResponse(body(before)) == "İAnswer.")
+    }
 }

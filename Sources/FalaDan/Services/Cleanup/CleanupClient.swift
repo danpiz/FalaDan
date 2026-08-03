@@ -124,6 +124,13 @@ struct CleanupClient: Sendable {
     /// Deliberately a scanner rather than a regex: it has to handle an unclosed
     /// opening tag (a completion truncated mid-thought), which is the case a
     /// naive `<think>.*?</think>` pattern silently misses.
+    ///
+    /// Every search runs against `result` itself, case-insensitively. Searching a
+    /// `lowercased()` copy and applying the indices back to the original is the
+    /// obvious way to write this and it is wrong: lowercasing is not
+    /// length-preserving — `İ` (U+0130) grows by a byte, `ẞ` (U+1E9E) shrinks by
+    /// one — so every offset past such a character lands in the wrong place, and
+    /// past the end it traps.
     static func stripReasoningBlocks(from content: String) -> String {
         // Matched on the opening delimiter only, so the *word* "think" in an
         // ordinary transcript is untouched — it is `<think` that marks a block.
@@ -131,21 +138,25 @@ struct CleanupClient: Sendable {
         let closers = ["</think>", "</thinking>"]
 
         var result = content
-        var guardCounter = 0
 
-        while guardCounter < 32 {
-            guardCounter += 1
-            let lower = result.lowercased()
-
+        // Each pass deletes from the first opener onwards, so `result` strictly
+        // shrinks and the loop cannot spin. No iteration cap is needed, and a cap
+        // would be the wrong shape anyway: hitting it would return a partially
+        // stripped string — reasoning pasted at the cursor, which is the one
+        // outcome this function exists to prevent.
+        while true {
             guard
                 let openRange = openers
-                    .compactMap({ lower.range(of: $0) })
+                    .compactMap({ result.range(of: $0, options: .caseInsensitive) })
                     .min(by: { $0.lowerBound < $1.lowerBound })
             else { break }
 
-            let after = lower[openRange.upperBound...]
             if let closeRange = closers
-                .compactMap({ after.range(of: $0) })
+                .compactMap({
+                    result.range(
+                        of: $0, options: .caseInsensitive,
+                        range: openRange.upperBound..<result.endIndex)
+                })
                 .min(by: { $0.lowerBound < $1.lowerBound })
             {
                 result.removeSubrange(openRange.lowerBound..<closeRange.upperBound)
