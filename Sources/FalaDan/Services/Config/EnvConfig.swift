@@ -97,8 +97,20 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     /// uninteresting or places a credential can hide. A value that does not parse
     /// to a host is reported as `<none>` rather than echoed, which is what makes
     /// a key pasted into `LLM_BASE_URL=` safe: it has no host.
+    ///
+    /// `percentEncodedHost`, not `host`: the latter percent-*decodes*, so a host
+    /// of `x%0A…` would put a newline — or a convincing forgery of this very line
+    /// — into the unified log. The encoded form is also the honest one, being
+    /// what was actually configured.
+    ///
+    /// The remaining echo is a host that is itself secret-shaped, which needs a
+    /// key pasted *after* a scheme (`https://gsk_…`). Not defended against on
+    /// purpose: telling a key from a hostname is the same unwinnable shape
+    /// guess this design exists to avoid, and it would cost the diagnostic.
     static func host(of urlString: String) -> String {
-        guard let host = URLComponents(string: urlString)?.host, !host.isEmpty else {
+        guard let host = URLComponents(string: urlString)?.percentEncodedHost,
+            !host.isEmpty
+        else {
             return "<none>"
         }
         return host

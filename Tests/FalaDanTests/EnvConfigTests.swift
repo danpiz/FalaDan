@@ -180,10 +180,13 @@ struct EnvConfigCleanupGateTests {
     }
 
     /// A whitespace-only key is unset, not redacted — the log line should say so.
+    ///
+    /// Asserts the `key:` field specifically. A bare `contains("<unset>")` passes
+    /// no matter what the key field says, because `model:` is unset by default.
     @Test func descriptionReportsAWhitespaceOnlyKeyAsUnset() {
         var c = EnvConfig.defaults
         c.llmAPIKey = "   "
-        #expect(c.description.contains("<unset>"))
+        #expect(c.description.contains("key: <unset>"))
     }
 }
 
@@ -269,7 +272,19 @@ struct EnvConfigRedactionTests {
         var c = EnvConfig.defaults
         c.llmBaseURL = userInfo
         #expect(!c.description.contains("hunter2"))
-        #expect(!c.description.contains("dan"))
+        #expect(!c.description.contains("dan:"))
+    }
+
+    /// The host is percent-encoded on the way out, so a crafted one cannot inject
+    /// line structure into a log entry that is written at public privacy.
+    @Test func aCraftedHostCannotForgeLogStructure() {
+        #expect(!EnvConfig.host(of: "http://%0Aevil/v1").contains("\n"))
+
+        let forgery = "http://x%2C%20key%3A%20%3Cset%3E%2C%20configured%3A%20true/v1"
+        var c = EnvConfig.defaults
+        c.llmBaseURL = forgery
+        #expect(!c.description.contains("key: <set>"))
+        #expect(!c.description.contains("configured: true"))
     }
 
     /// Set/unset still has to be reported accurately, or the line says nothing.
