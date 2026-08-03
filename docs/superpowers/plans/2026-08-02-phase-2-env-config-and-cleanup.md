@@ -971,6 +971,16 @@ Pipe to `xargs`; do not use `FILES=$(...)` with unquoted `$FILES` — zsh does n
 
 Run: `grep -rn --include="*.swift" -e "AI Editing" -e "Edit Mode" -e "editMode" Sources/Views/ || echo "CLEAN"`
 
+- [ ] **Step 2b: Gate "Re-transcribe with cleanup" on cleanup being configured**
+
+`Views/Popovers/HistoryPopoverView.swift` offers a "Re-transcribe with cleanup" action that
+passes `applyCleanup: true` unconditionally. With no `LLM_API_KEY` set, `applyAutoCleanup`'s
+guard skips the call and returns the raw transcript — so the menu item runs, appears to
+succeed, and changes nothing. A silent no-op is worse than an absent affordance.
+
+Hide or disable it when `!appState.envConfig.isCleanupConfigured`. Found by Task 3's review;
+no other task touches this file, so without this step it ships as a dead control.
+
 - [ ] **Step 3: Run the gate**
 
 Run: `./Scripts/verify.sh --dirty`
@@ -1230,6 +1240,29 @@ Does the gap between releasing Fn and text appearing feel acceptable? This is th
 - [ ] **Step 4: Verify the failure path**
 
 Set `LLM_API_KEY` to a deliberately invalid value and relaunch. Dictation must still paste the raw transcript, with no error dialog. A cleanup outage must never cost words.
+
+Then confirm the log says something useful rather than "error 2":
+
+```bash
+log show --last 5m --predicate 'subsystem CONTAINS "faladan"' --info | grep -i cleanup
+# want: "Cleanup failed: HTTP 401"
+```
+
+- [ ] **Step 5: Check capitalisation is not being undone**
+
+Raised by Task 3's review. `applyFormatting` runs *after* cleanup, so with
+`FormattingSettings.capitalization == .casual` the formatter lowercases the whole result —
+including proper nouns the cleanup model correctly capitalised. This ordering predates the
+phase, but it previously affected only opt-in recordings and now affects every dictation.
+
+Dictate a sentence containing a name and a place: *"tell Sarah the meeting moved to Lisbon"*.
+If either comes back lowercased, the fix is a settings change (`capitalization` to `auto`) or a
+reorder in a later phase — decide which, and record it.
+
+- [ ] **Step 6: Note what the settings UI now claims**
+
+The AI-Editing section no longer gates dictation cleanup — `LLM_CLEANUP` in `.env` is the only
+off switch. Task 7 removes the misleading controls; confirm none survived.
 
 **Done means:** Dan has confirmed all four in his own words, or `HANDOFF.md` records the specific failure.
 
