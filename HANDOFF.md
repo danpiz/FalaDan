@@ -38,35 +38,23 @@ Full execution record — every review finding, every ruling, every deferred min
 | — | Out of plan: strip `<think>` reasoning blocks |
 | — | Final whole-branch review: 1 Critical, 3 Important, 5 fix rounds |
 
-## Remaining — Task 11, Dan at the keyboard
+## Task 11 — done, all checks passed
 
-In this order:
+Verified by Dan on 2026-08-03, on a real build:
 
-1. **Move `.env` aside first and dictate with no config at all.** Most important check in the
-   phase: cleanup is on by default, so `isCleanupConfigured` returning false is the only thing
-   stopping a failed network call per utterance. Behaviour must be identical to Phase 1.
-2. Restore `.env`, dictate *"um so the meeting is at three pm scratch that four pm and their
-   going to deploy it"* — expect *"The meeting is at 4pm, and they're going to deploy it."*
-3. **Judge the latency.** Measured at ~0.5s with `llama-3.3-70b-versatile`. Only Dan can say
-   whether that feels right; if not, the answer is a faster model or `LLM_CLEANUP=off`, not code.
-4. Set an invalid key and confirm dictation still pastes raw text with no dialog. Then check
-   the log says `HTTP 401` rather than `error 2`.
-5. Dictate a proper noun (*"tell Sarah the meeting moved to Lisbon"*) — `applyFormatting` runs
-   *after* cleanup, so with `capitalization == .casual` it can lowercase what cleanup correctly
-   capitalised. Pre-existing ordering, now universal.
+1. **No `.env` at all** — raw transcript pasted immediately, no toast, no dialog, indicator
+   cleared. Confirmed objectively as well: zero cleanup entries in the log for that run, so
+   `isCleanupConfigured` stopped the call rather than the call failing quietly. This was the
+   phase's main risk.
+2. **With `.env`** — fillers removed, the "scratch that" backtrack honoured, "their" → "they're".
+3. **Latency** — ~0.5s, judged acceptable.
+4. **Invalid key** — raw text still pasted, no dialog; log reads `Cleanup failed: HTTP 401`,
+   confirming Task 3's fix live. No key material in the log.
+5. **Proper nouns** — "Sarah" and "Lisbon" both came back capitalised. The
+   `applyFormatting`-after-cleanup hazard did not reproduce.
+6. Third-party app paste and the Fn-brush discard path both confirmed.
 
-New in the final review — a diagnostic that did not exist before:
-
-```bash
-# /usr/bin/log, not `log` — zsh has a builtin of that name that shadows it
-/usr/bin/log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
-```
-
-Prints host, whether the key and model are set, and whether cleanup is configured. Nothing
-user-supplied is echoed. This is the only way to tell "no `.env` found" from "cleanup ran and
-changed nothing", since cleanup failure is silent by design.
-
-**Then** `superpowers:finishing-a-development-branch`.
+**The branch is ready to merge.** Next step is `superpowers:finishing-a-development-branch`.
 
 ## Needs Dan's decision — before any release
 
