@@ -956,7 +956,12 @@ CleanupPromptStore stays: it holds the system prompt CleanupClient uses."
 - Modify: `Sources/FalaDan/Views/MenuBarView.swift`, `SettingsWindowView.swift`, `Popovers/SettingsPopoverView.swift`, `ModelPickerView.swift` — remove any remaining AI-Editing UI
 - Modify: `Sources/FalaDan/Views/Popovers/HistoryPopoverView.swift` — Step 2b
 - Modify: `Sources/FalaDan/AppState.swift` — delete the now-dead `autoCleanupEnabled` getter
-  (its only reader was the shortcut row Task 4 removed; found by Task 4's review)
+  (its only reader was the shortcut row Task 4 removed; found by Task 4's review), and the
+  now-callerless `refreshShortcutRegistrations()` whose doc comment describes feature-gated
+  registration that no longer exists
+- Modify: `Sources/FalaDan/Services/Security/CustomProviderAPIKeyStore.swift` — Step 2c
+- Modify: `Sources/FalaDan/Models/Recording.swift` — mark `RecordingEditMode` as legacy
+  (decode/display compatibility only; nothing produces new ones)
 
 **Note:** the flag is **renamed, not deleted**. It drives the menu bar's working indicator; deleting it removes the only signal that cleanup is running.
 
@@ -984,10 +989,38 @@ succeed, and changes nothing. A silent no-op is worse than an absent affordance.
 Hide or disable it when `!appState.envConfig.isCleanupConfigured`. Found by Task 3's review;
 no other task touches this file, so without this step it ships as a dead control.
 
+- [ ] **Step 2c: Delete the orphaned edit API key, and clear the one already stored**
+
+Found by Task 6's review, and the most important step in this task.
+
+`CustomProviderAPIKeyStore` still exposes `editKey()` / `saveEditKey(_:)` and a
+`CustomProviderAPIKeyKind.edit` case (account `"custom-edit"`). Their only consumer was the
+settings type Task 6 deleted, so they are dead code — but the Keychain item itself is not.
+A user who had configured the custom edit endpoint keeps that API key in their login keychain
+forever, with no code left to read, rotate, or clear it and no UI that mentions it.
+
+For a phase whose purpose is removing stored credentials, leaving one stranded is the wrong
+resting state. So:
+
+1. Delete the two accessors and the `.edit` kind.
+2. Issue a one-time `SecItemDelete` for the `custom-edit` account at launch, so existing
+   installs are cleaned rather than only new ones being clean. Guard it behind a
+   `UserDefaults` flag so it runs once and is not a keychain call on every launch.
+
+Also sweep the UserDefaults keys orphaned by Task 6 — `EditModeBehavior`, `EditModeModel`,
+`EditModeVoiceEdit`, and the `CustomEditProviderSettings` blob — in the same one-time pass.
+These are inert, but leaving them means the next reader cannot tell what is live.
+
 - [ ] **Step 3: Run the gate**
 
 Run: `./Scripts/verify.sh --dirty`
 Expected: all tests pass, count unchanged. `MenuBarIconTests` exercises the icon states — if it references the old name, update it.
+
+Note from Task 6's review: `MenuBarView.cleanupCharThreshold` is 30,000 characters, but the
+count it guards now comes from a transcript capped at 600 seconds of speech — roughly 9k
+characters. The branch is unreachable, so `editModeProcessingCharCount` has no observable
+effect. Decide while renaming: either drop the count and its branch, or lower the threshold to
+something a transcript can actually reach.
 
 - [ ] **Step 4: Commit**
 
