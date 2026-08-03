@@ -18,12 +18,21 @@ private let log = Logger(subsystem: Logger.subsystem, category: "LegacyEditModeC
 /// account at all (its only live account is the transcription key), so the
 /// Keychain query is duplicated here rather than routed through it.
 ///
-/// Runs once per install, gated by `hasRunKey`, so a clean install — and
-/// every launch after the first on an existing one — never pays for a
-/// Keychain call it has no reason to make. A missing Keychain item
-/// (`errSecItemNotFound`) is the normal outcome for most installs, which
-/// never configured the old custom edit endpoint — not a failure worth
-/// surfacing.
+/// Runs until the Keychain item is provably gone, gated by `hasRunKey` —
+/// not "runs once," but "keeps trying once per launch until it succeeds."
+/// `hasRunKey` is set only after `SecItemDelete` reports `errSecSuccess` or
+/// `errSecItemNotFound` (item already gone); any other status leaves it
+/// unset so the next launch retries. `SecItemDelete` against the app's own
+/// item is local, synchronous, and non-prompting, so retrying costs
+/// essentially nothing — and a transient failure is the one case where
+/// giving up would leave the credential stranded forever, which is exactly
+/// what this migration exists to prevent. A missing Keychain item is the
+/// normal outcome for most installs, which never configured the old
+/// custom edit endpoint — not a failure worth surfacing.
+///
+/// The UserDefaults sweep below is unconditional regardless of the
+/// Keychain outcome: those removals cannot fail, so there is no reason to
+/// hold them hostage to a Keychain retry.
 enum LegacyEditModeCleanup {
     private static let hasRunKey = "LegacyEditModeCleanupDidRun"
 
@@ -54,16 +63,22 @@ enum LegacyEditModeCleanup {
             kSecAttrAccount as String: editAccount,
         ]
         let status = SecItemDelete(query as CFDictionary)
-        if status != errSecSuccess, status != errSecItemNotFound {
-            // Never log the key itself — only the OSStatus, which carries
-            // no secret material. Best-effort: an unexpected status here
-            // still means the flag below gets set, since this must not
-            // turn into a Keychain prompt/call repeated on every launch.
+        let deleted = (status == errSecSuccess || status == errSecItemNotFound)
+
+        if !deleted {
+            // Only the OSStatus — it carries no secret material.
             log.error("Legacy edit-mode keychain cleanup returned unexpected status \(status)")
         }
 
         orphanedDefaultsKeys.forEach { defaults.removeObject(forKey: $0) }
 
-        defaults.set(true, forKey: hasRunKey)
+        // Marked done only once the key is provably gone. SecItemDelete against
+        // our own item is local and non-prompting, so retrying next launch is
+        // nearly free — and a transient failure is the one case where giving up
+        // would leave the credential stranded forever, which is the exact
+        // outcome this migration exists to prevent.
+        if deleted {
+            defaults.set(true, forKey: hasRunKey)
+        }
     }
 }

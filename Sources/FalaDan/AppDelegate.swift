@@ -23,10 +23,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         UNUserNotificationCenter.current().delegate = self
 
-        // One-time sweep of state stranded by the deleted edit-mode feature:
-        // a Keychain-stored API key with no code left to reach it, plus a
+        // Sweep of state stranded by the deleted edit-mode feature: a
+        // Keychain-stored API key with no code left to reach it, plus a
         // handful of inert UserDefaults keys. Safe to call on every launch —
-        // it no-ops itself after the first run. See LegacyEditModeCleanup.
+        // it no-ops once the Keychain item is confirmed gone, and retries
+        // cheaply on a transient failure rather than giving up. See
+        // LegacyEditModeCleanup.
         LegacyEditModeCleanup.runOnce()
 
         // Disable App Nap for reliable background operation
