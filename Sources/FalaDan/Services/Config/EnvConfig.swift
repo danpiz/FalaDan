@@ -38,8 +38,8 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     ///
     /// Load-bearing. Cleanup runs on every dictation now, so this is the only
     /// thing standing between an unconfigured install and a failing network call
-    /// per utterance — and it is what keeps the app fully offline when no key is
-    /// set.
+    /// per utterance — and it is what stops any transcript leaving the machine
+    /// when no key is set.
     var isCleanupConfigured: Bool {
         guard llmCleanupEnabled else { return false }
         guard let key = llmAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -54,85 +54,54 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     var minHold: TimeInterval { TimeInterval(minHoldMS) / 1000 }
     var minTranscribe: TimeInterval { TimeInterval(minTranscribeMS) / 1000 }
 
-    /// Redacts anything that could be a credential. This type ends up in log
-    /// lines and crash reports, which persist to disk and get swept into a
-    /// sysdiagnose.
+    /// A log line describing the configuration without reproducing any of it.
     ///
-    /// Redacting `llmAPIKey` is not sufficient on its own. The other two string
-    /// fields are opaque user-supplied text, and the realistic slip is pasting a
-    /// key into the wrong line of a file where `LLM_API_KEY=` and `LLM_MODEL=`
-    /// sit next to each other. A misplaced key must not become a log entry.
+    /// This ends up in the unified log at public privacy, which persists to disk
+    /// and is swept into a sysdiagnose — so the rule here is that **no
+    /// user-supplied string is ever echoed**, only facts derived from one.
+    ///
+    /// Three earlier versions of this tried to echo the model id and base URL
+    /// while redacting anything key-shaped. That cannot be made to work. The
+    /// realistic slip is a key pasted one line off in `.env` — where
+    /// `LLM_BASE_URL=`, `LLM_API_KEY=` and `LLM_MODEL=` sit in a block — so
+    /// every field has to be treated as possibly holding a key. And a key is not
+    /// distinguishable from a model id by shape: a UUID-format token (real, for
+    /// self-hosted gateways) has the same structure as an ordinary identifier.
+    /// Every rule tried either leaked a real key format or blanked a real
+    /// config value, usually both.
+    ///
+    /// So it reports set/unset instead, plus the base URL's host — parsed out by
+    /// `URLComponents`, never the raw string, so a key in that field yields no
+    /// host and reports `<none>`. That answers what this line exists to answer:
+    /// was `.env` found, is cleanup configured, and which provider. A wrong model
+    /// id surfaces separately as the `HTTP 404` in `diagnostic(for:)`.
     var description: String {
-        let trimmedKey = llmAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let key = (trimmedKey?.isEmpty == false) ? "<redacted>" : "<unset>"
         return """
-            EnvConfig(baseURL: \(Self.redactingCredentials(in: llmBaseURL)), key: \(key), \
-            model: \(llmModel.map(Self.redactingSecretShape) ?? "<unset>"), \
-            cleanup: \(llmCleanupEnabled), \
+            EnvConfig(host: \(Self.host(of: llmBaseURL)), \
+            key: \(Self.presence(of: llmAPIKey)), \
+            model: \(Self.presence(of: llmModel)), \
+            cleanup: \(llmCleanupEnabled), configured: \(isCleanupConfigured), \
             minHoldMS: \(minHoldMS), minTranscribeMS: \(minTranscribeMS))
             """
     }
 
-    /// Blanks a value that looks like an API key rather than a model id.
-    ///
-    /// Matched on prefix for the providers this app documents, plus a backstop
-    /// for the ones it does not. The backstop is the length of the longest
-    /// *unbroken* alphanumeric run, not the length of the value: keys are one
-    /// long opaque run (`gsk_` and then 52 characters of base62), while model
-    /// ids are words joined by separators, so even the longest of them
-    /// (`meta-llama/llama-4-maverick-17b-128e-instruct`, 45 characters) has no
-    /// run past `maverick`.
-    ///
-    /// Total length was the obvious rule and the wrong one — it redacted real
-    /// Groq, OpenRouter and Ollama ids, which is worse than useless: this string
-    /// exists to answer "which model did it load", and it went blank for exactly
-    /// the long ids most likely to be mistyped.
-    static func redactingSecretShape(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let prefixes = ["sk-", "sk_", "gsk_", "xai-", "AIza", "Bearer "]
-        if prefixes.contains(where: { trimmed.hasPrefix($0) }) { return "<redacted>" }
-
-        var run = 0
-        var longestRun = 0
-        for character in trimmed {
-            if character.isLetter || character.isNumber {
-                run += 1
-                longestRun = max(longestRun, run)
-            } else {
-                run = 0
-            }
-        }
-        if longestRun >= 25 { return "<redacted>" }
-        return value
+    /// Whether a field is set, saying nothing about its contents.
+    private static func presence(of value: String?) -> String {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? "<set>" : "<unset>"
     }
 
-    /// Strips credentials a URL can carry, then applies the key-shape check to
-    /// what is left.
+    /// The host of a base URL, and nothing else from it.
     ///
-    /// Some providers take the key as `?api_key=`, and a URL can carry
-    /// `https://user:secret@host`. Neither is how this app authenticates — it
-    /// sends a bearer header — but the base URL is whatever the user typed.
-    ///
-    /// The shape check has to run on the success path, not only when parsing
-    /// fails. `URLComponents(string:)` *succeeds* on a bare API key — it parses
-    /// as a relative path — so a key pasted into `LLM_BASE_URL=` never reached
-    /// the fallback. That is the likelier mis-paste of the two: in
-    /// `.env.example`, `LLM_BASE_URL=` sits directly above `LLM_API_KEY=`.
-    static func redactingCredentials(in urlString: String) -> String {
-        guard var components = URLComponents(string: urlString) else {
-            return redactingSecretShape(urlString)
+    /// Host only — not scheme, path, query or user-info, all of which are either
+    /// uninteresting or places a credential can hide. A value that does not parse
+    /// to a host is reported as `<none>` rather than echoed, which is what makes
+    /// a key pasted into `LLM_BASE_URL=` safe: it has no host.
+    static func host(of urlString: String) -> String {
+        guard let host = URLComponents(string: urlString)?.host, !host.isEmpty else {
+            return "<none>"
         }
-        let hadSecret =
-            components.query != nil || components.password != nil
-            || components.user != nil || components.fragment != nil
-        components.query = nil
-        components.fragment = nil
-        components.user = nil
-        components.password = nil
-        guard let stripped = components.string else { return "<redacted>" }
-        let checked = redactingSecretShape(stripped)
-        guard checked == stripped else { return checked }
-        return hadSecret ? stripped + "<redacted-query>" : stripped
+        return host
     }
 
     // MARK: - Loading

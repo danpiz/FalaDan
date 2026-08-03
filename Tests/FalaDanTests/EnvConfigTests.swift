@@ -188,89 +188,102 @@ struct EnvConfigCleanupGateTests {
 }
 
 /// Secrets must never reach a log line or a crash report.
+///
+/// The invariant is stronger than "the key field is redacted": no user-supplied
+/// string is echoed at all, from any field. Three versions of this tried to echo
+/// the model id and base URL while filtering out anything key-shaped, and each
+/// one both leaked a real key format and blanked a real config value. A
+/// UUID-format token and an ordinary identifier are the same shape; there is no
+/// rule to find.
 struct EnvConfigRedactionTests {
-    @Test func descriptionRedactsTheApiKey() {
-        var c = EnvConfig.defaults
-        c.llmAPIKey = "sk-super-secret-value"
-        #expect(!c.description.contains("sk-super-secret-value"))
-    }
-
-    @Test func descriptionStillShowsNonSecrets() {
-        var c = EnvConfig.defaults
-        c.llmModel = "some-model"
-        #expect(c.description.contains("some-model"))
-    }
-
-    /// `.env.example` puts `LLM_API_KEY=` and `LLM_MODEL=` on adjacent lines and
-    /// both take opaque strings, so a key landing in the model field is an
-    /// ordinary slip — and this description is logged at public privacy.
-    @Test func descriptionRedactsAKeyPastedIntoTheModelField() {
-        for stray in [
-            "sk-super-secret-value", "gsk_liveKeyMaterial", "AIzaSyDsomethinglong",
-            "xai-abc123", "0123456789012345678901234567890123456789",
-        ] {
-            var c = EnvConfig.defaults
-            c.llmModel = stray
-            #expect(!c.description.contains(stray), "leaked model value: \(stray)")
-        }
-    }
-
-    /// Real model ids must survive — a redacted one makes the log line useless
-    /// for the thing it exists to diagnose.
+    /// The whole contract, in one test: whatever goes into any string field,
+    /// none of it comes back out.
     ///
-    /// The long slash-separated ids are the point of this test, not padding. A
-    /// total-length rule redacted every one of them, and they are the ids most
-    /// worth being able to read back: the short ones are hard to mistype.
-    @Test func descriptionKeepsOrdinaryModelIds() {
-        for model in [
-            "llama-3.3-70b-versatile", "gemini-3.6-flash", "openai/gpt-oss-20b",
-            "qwen/qwen3.6-27b", "gpt-4o-mini", "llama3.2",
-            "meta-llama/llama-4-scout-17b-16e-instruct",
-            "meta-llama/llama-4-maverick-17b-128e-instruct",
-            "mistralai/mistral-small-3.2-24b-instruct-2506",
-            "nousresearch/hermes-3-llama-3.1-405b:extended",
-            "hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF:Q4_K_M",
-            "accounts/fireworks/models/llama-v3p1-405b-instruct",
-        ] {
-            var c = EnvConfig.defaults
-            c.llmModel = model
-            #expect(c.description.contains(model), "over-redacted: \(model)")
-        }
-    }
-
-    /// `LLM_BASE_URL=` sits directly above `LLM_API_KEY=` in `.env.example`, so
-    /// it is at least as likely a mis-paste target as the model field.
-    ///
-    /// `URLComponents(string:)` succeeds on a bare key — it parses as a relative
-    /// path — so this cannot be left to the parse-failure branch.
-    @Test func descriptionRedactsAKeyPastedIntoTheBaseURLField() {
-        for stray in [
+    /// The strays are every documented provider's key format plus the ones that
+    /// defeated a shape rule — UUID (longest run 12), dashed hex, AWS-style
+    /// base64 with separators, and a dot-separated token. Each is tried in every
+    /// field, because a mis-paste lands wherever the cursor was.
+    @Test func noFieldEchoesItsValueIntoTheDescription() {
+        let strays = [
             "gsk_" + String(repeating: "a1B2c3D4", count: 6),
             "sk-proj-" + String(repeating: "Xy9Z", count: 10),
+            "sk-ant-api03-" + String(repeating: "Zq4", count: 20),
             "AIzaSyD" + String(repeating: "k3J", count: 11),
             "sk-or-v1-" + String(repeating: "9f", count: 32),
             "xai-" + String(repeating: "Qw7", count: 16),
-        ] {
-            var c = EnvConfig.defaults
-            c.llmBaseURL = stray
-            #expect(!c.description.contains(stray), "leaked base URL value")
+            "hf_" + String(repeating: "Lm2", count: 12),
+            "r8_" + String(repeating: "Pd8", count: 12),
+            "3f2a91c4-7b8e-4d2f-9a10-6c5e8b4d2f71",
+            "a1b2c3d4-e5f6a7b8-c9d0e1f2-a3b4c5d6-e7f8a9b0",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "eyJhbGci.eyJzdWIiOiIx.dBjftJeZ4CVP",
+        ]
+        for stray in strays {
+            var model = EnvConfig.defaults
+            model.llmModel = stray
+            #expect(!model.description.contains(stray), "leaked via model: \(stray)")
+
+            var key = EnvConfig.defaults
+            key.llmAPIKey = stray
+            #expect(!key.description.contains(stray), "leaked via key: \(stray)")
+
+            var base = EnvConfig.defaults
+            base.llmBaseURL = stray
+            #expect(!base.description.contains(stray), "leaked via baseURL: \(stray)")
         }
     }
 
-    /// A key can also ride in the base URL — as a query parameter, which some
-    /// providers accept, or as URL user-info.
-    @Test func descriptionRedactsCredentialsCarriedInTheBaseURL() {
-        var query = EnvConfig.defaults
-        query.llmBaseURL = "https://api.example.com/v1?api_key=sk-SECRET123"
-        #expect(!query.description.contains("sk-SECRET123"))
-        #expect(query.description.contains("api.example.com"))
+    /// A key pasted into `LLM_BASE_URL=` parses as a relative path, so it has no
+    /// host — which is exactly why reporting the host is safe where echoing the
+    /// string was not.
+    @Test func aBareKeyInTheBaseURLFieldHasNoHost() {
+        #expect(EnvConfig.host(of: "gsk_" + String(repeating: "a1B2", count: 13)) == "<none>")
+        #expect(EnvConfig.host(of: "") == "<none>")
+        #expect(EnvConfig.host(of: "   ") == "<none>")
+        #expect(EnvConfig.host(of: "not a url at all") == "<none>")
+    }
 
-        var userInfo = EnvConfig.defaults
-        userInfo.llmBaseURL = "https://dan:hunter2@api.example.com/v1"
-        #expect(!userInfo.description.contains("hunter2"))
+    /// The host is the diagnostic payload — "which provider am I talking to" —
+    /// and must survive for the endpoints this app documents, including ones
+    /// whose path carries a long account id.
+    @Test func theHostSurvivesForRealEndpoints() {
+        #expect(EnvConfig.host(of: "https://api.groq.com/openai/v1") == "api.groq.com")
+        #expect(
+            EnvConfig.host(of: "https://generativelanguage.googleapis.com/v1beta/openai/")
+                == "generativelanguage.googleapis.com")
+        #expect(EnvConfig.host(of: "http://localhost:11434/v1") == "localhost")
+        #expect(
+            EnvConfig.host(of: "https://gateway.ai.cloudflare.com/v1/0123456789abcdef/gw/openai")
+                == "gateway.ai.cloudflare.com")
+    }
 
-        var plain = EnvConfig.defaults
-        plain.llmBaseURL = "https://api.groq.com/openai/v1"
-        #expect(plain.description.contains("https://api.groq.com/openai/v1"))
+    /// Credentials a URL can carry — query parameters and user-info — are not
+    /// part of the host, so they cannot ride along.
+    @Test func hostDropsCredentialsCarriedInTheURL() {
+        let query = "https://api.example.com/v1?api_key=sk-SECRET123"
+        #expect(EnvConfig.host(of: query) == "api.example.com")
+
+        let userInfo = "https://dan:hunter2@api.example.com/v1"
+        #expect(EnvConfig.host(of: userInfo) == "api.example.com")
+
+        var c = EnvConfig.defaults
+        c.llmBaseURL = userInfo
+        #expect(!c.description.contains("hunter2"))
+        #expect(!c.description.contains("dan"))
+    }
+
+    /// Set/unset still has to be reported accurately, or the line says nothing.
+    @Test func descriptionReportsPresenceAccurately() {
+        var configured = EnvConfig.defaults
+        configured.llmAPIKey = "gsk_realkey"
+        configured.llmModel = "llama-3.3-70b-versatile"
+        #expect(configured.description.contains("key: <set>"))
+        #expect(configured.description.contains("model: <set>"))
+        #expect(configured.description.contains("configured: true"))
+
+        let bare = EnvConfig.defaults
+        #expect(bare.description.contains("key: <unset>"))
+        #expect(bare.description.contains("model: <unset>"))
+        #expect(bare.description.contains("configured: false"))
     }
 }

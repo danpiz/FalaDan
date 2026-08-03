@@ -5,7 +5,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/version.env"
 
 ZIP=${1:?"Usage: $0 <FalaDan-<ver>.zip>"}
-FEED_URL="${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/andyhtran/FalaDan/main/appcast.xml}"
+FEED_URL="${SPARKLE_FEED_URL:-https://raw.githubusercontent.com/danpiz/FalaDan/main/appcast.xml}"
 SPARKLE_CHANNEL="${SPARKLE_CHANNEL:-}"
 
 if [[ ! -f "$ZIP" ]]; then
@@ -21,7 +21,7 @@ fi
 ZIP_DIR=$(cd "$(dirname "$ZIP")" && pwd)
 ZIP_NAME=$(basename "$ZIP")
 
-DOWNLOAD_URL_PREFIX="${SPARKLE_DOWNLOAD_URL_PREFIX:-https://github.com/andyhtran/FalaDan/releases/download/v${MARKETING_VERSION}/}"
+DOWNLOAD_URL_PREFIX="${SPARKLE_DOWNLOAD_URL_PREFIX:-https://github.com/danpiz/FalaDan/releases/download/v${MARKETING_VERSION}/}"
 
 WORK_DIR=$(mktemp -d /tmp/appcast-gen.XXXXXX)
 cleanup() { rm -rf "$WORK_DIR"; }
