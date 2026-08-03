@@ -183,12 +183,16 @@ final class AppState: Sendable {
     /// without a key to hold. The hotkey path is `beginHoldToTalk` /
     /// `endHoldToTalk` and no longer routes through here.
     ///
-    /// **Precondition for any future caller:** clear `pendingHoldRelease` before
-    /// starting. Unlike `beginHoldToTalk`, this path neither clears a parked
-    /// release nor bumps `holdGeneration`, so a release parked by an earlier hold
-    /// still matches the current generation and `applyPendingHoldRelease` would
-    /// apply it — stopping or discarding the recording this call just began. The
+    /// **Precondition:** `pendingHoldRelease` must be cleared before starting.
+    /// Unlike `beginHoldToTalk`, this path neither clears a parked release nor
+    /// bumps `holdGeneration`, so a release parked by an earlier hold still
+    /// matches the current generation and `applyPendingHoldRelease` would apply
+    /// it — stopping or discarding the recording this call just began. The
     /// generation check does not catch it; see `holdGeneration`.
+    ///
+    /// `pendingHoldRelease` is `private`, so only code in this file can satisfy
+    /// that: a caller elsewhere cannot make itself safe, and the clear has to be
+    /// added here when this method acquires one.
     ///
     /// Currently uncalled, which is the only reason that is theoretical. Retained
     /// for the strip phase to decide; do not give it a caller without resolving
@@ -322,11 +326,16 @@ final class AppState: Sendable {
     /// to meet the next one.
     ///
     /// `startRecordingFlow`'s `guard !captureTransitionInFlight` sits above the
-    /// `defer` and so is not covered here — but a *hold* start cannot reach it:
-    /// `beginHoldToTalk` checks the same flag first and bails before starting a
-    /// flow at all, which is why the press that would have hit it never bumps
-    /// `holdGeneration`. Its parked release stays owned by the flow already
-    /// running, and that flow's own `defer` clears it.
+    /// `defer` and so is not covered here. A hold start *can* reach it:
+    /// `startRecording()` defers the flow into a `Task`, so two presses landing
+    /// before either flow body runs both clear `beginHoldToTalk`'s check of the
+    /// same flag, and the second flow then bails at the guard with its window
+    /// left open.
+    ///
+    /// That is safe, but not for the reason it looks: the flag being set means a
+    /// flow is already running, and *that* flow's `defer` clears the window. The
+    /// second press's release is applied to the first press's recording — correct
+    /// either way, since the user did release the key.
     ///
     /// Hoisting the `defer` above the guard was the obvious fix and the wrong
     /// one: a second flow bailing there would then clear a live hold's window,

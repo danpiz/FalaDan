@@ -54,15 +54,54 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     var minHold: TimeInterval { TimeInterval(minHoldMS) / 1000 }
     var minTranscribe: TimeInterval { TimeInterval(minTranscribeMS) / 1000 }
 
-    /// Redacts the API key. This type ends up in log lines and crash reports.
+    /// Redacts anything that could be a credential. This type ends up in log
+    /// lines and crash reports, which persist to disk and get swept into a
+    /// sysdiagnose.
+    ///
+    /// Redacting `llmAPIKey` is not sufficient on its own. The other two string
+    /// fields are opaque user-supplied text, and the realistic slip is pasting a
+    /// key into the wrong line of a file where `LLM_API_KEY=` and `LLM_MODEL=`
+    /// sit next to each other. A misplaced key must not become a log entry.
     var description: String {
         let trimmedKey = llmAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = (trimmedKey?.isEmpty == false) ? "<redacted>" : "<unset>"
         return """
-            EnvConfig(baseURL: \(llmBaseURL), key: \(key), \
-            model: \(llmModel ?? "<unset>"), cleanup: \(llmCleanupEnabled), \
+            EnvConfig(baseURL: \(Self.redactingCredentials(in: llmBaseURL)), key: \(key), \
+            model: \(llmModel.map(Self.redactingSecretShape) ?? "<unset>"), \
+            cleanup: \(llmCleanupEnabled), \
             minHoldMS: \(minHoldMS), minTranscribeMS: \(minTranscribeMS))
             """
+    }
+
+    /// Blanks a value that looks like an API key rather than a model id.
+    ///
+    /// Matched on prefix, which covers the providers this app documents, plus a
+    /// length backstop for the ones it does not: model ids are human-readable and
+    /// short (`llama-3.3-70b-versatile` is 23 characters), and nothing legitimate
+    /// runs to 40 unbroken non-space characters.
+    static func redactingSecretShape(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefixes = ["sk-", "sk_", "gsk_", "xai-", "AIza", "Bearer "]
+        if prefixes.contains(where: { trimmed.hasPrefix($0) }) { return "<redacted>" }
+        if trimmed.count >= 40, !trimmed.contains(" ") { return "<redacted>" }
+        return value
+    }
+
+    /// Strips the query string and any user-info component from a URL.
+    ///
+    /// Some providers take the key as `?api_key=`, and a URL can carry
+    /// `https://user:secret@host`. Neither is how this app authenticates — it
+    /// sends a bearer header — but the base URL is whatever the user typed.
+    static func redactingCredentials(in urlString: String) -> String {
+        guard var components = URLComponents(string: urlString) else {
+            return redactingSecretShape(urlString)
+        }
+        let hadSecret = components.query != nil || components.password != nil
+        components.query = nil
+        components.user = nil
+        components.password = nil
+        guard let stripped = components.string else { return "<redacted>" }
+        return hadSecret ? stripped + "<redacted-query>" : stripped
     }
 
     // MARK: - Loading

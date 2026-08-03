@@ -200,4 +200,48 @@ struct EnvConfigRedactionTests {
         c.llmModel = "some-model"
         #expect(c.description.contains("some-model"))
     }
+
+    /// `.env.example` puts `LLM_API_KEY=` and `LLM_MODEL=` on adjacent lines and
+    /// both take opaque strings, so a key landing in the model field is an
+    /// ordinary slip — and this description is logged at public privacy.
+    @Test func descriptionRedactsAKeyPastedIntoTheModelField() {
+        for stray in [
+            "sk-super-secret-value", "gsk_liveKeyMaterial", "AIzaSyDsomethinglong",
+            "xai-abc123", "0123456789012345678901234567890123456789",
+        ] {
+            var c = EnvConfig.defaults
+            c.llmModel = stray
+            #expect(!c.description.contains(stray), "leaked model value: \(stray)")
+        }
+    }
+
+    /// Real model ids must survive — a redacted one makes the log line useless
+    /// for the thing it exists to diagnose.
+    @Test func descriptionKeepsOrdinaryModelIds() {
+        for model in [
+            "llama-3.3-70b-versatile", "gemini-3.6-flash", "openai/gpt-oss-20b",
+            "qwen/qwen3.6-27b", "gpt-4o-mini", "llama3.2",
+        ] {
+            var c = EnvConfig.defaults
+            c.llmModel = model
+            #expect(c.description.contains(model), "over-redacted: \(model)")
+        }
+    }
+
+    /// A key can also ride in the base URL — as a query parameter, which some
+    /// providers accept, or as URL user-info.
+    @Test func descriptionRedactsCredentialsCarriedInTheBaseURL() {
+        var query = EnvConfig.defaults
+        query.llmBaseURL = "https://api.example.com/v1?api_key=sk-SECRET123"
+        #expect(!query.description.contains("sk-SECRET123"))
+        #expect(query.description.contains("api.example.com"))
+
+        var userInfo = EnvConfig.defaults
+        userInfo.llmBaseURL = "https://dan:hunter2@api.example.com/v1"
+        #expect(!userInfo.description.contains("hunter2"))
+
+        var plain = EnvConfig.defaults
+        plain.llmBaseURL = "https://api.groq.com/openai/v1"
+        #expect(plain.description.contains("https://api.groq.com/openai/v1"))
+    }
 }

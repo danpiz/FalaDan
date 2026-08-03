@@ -48,14 +48,23 @@ ad-hoc signing on every `just dev` — see [Troubleshooting](#troubleshooting).
 
 ### What leaves your machine
 
-Nothing, by default. Two things change that, and both are opt-in:
+No recording and no transcript, by default. Two things change that, and both are opt-in:
 
 - **LLM cleanup**, if you configure it in `.env`, sends the transcript *text* — never the
   audio — to the provider you named.
 - **Custom transcription mode**, if you select it in the model picker, uploads the **audio
   itself** to the endpoint you configured. The other two transcription models are local.
 
-With no `.env` and the default model, FalaDan makes no network calls at all.
+FalaDan does make network requests that carry none of your content:
+
+- **Model downloads.** No model ships in the app bundle. Parakeet is fetched from Hugging Face
+  on first launch, and whisper.cpp (~1GB, plus a VAD model) the first time you select it. Both
+  are cached; after that, transcription is offline.
+- **Update checks**, in signed release builds only. `just dev` builds have the update feed
+  disabled.
+
+So: after the first launch has fetched a model, a default install with no `.env` sends nothing
+further.
 
 ## Configuration
 
@@ -74,7 +83,7 @@ launches with `open`, so the working directory is `/` and a repo-root `.env` is 
 Use the path above.
 
 Changing `.env` takes effect on the next launch. To confirm what was loaded — the key is
-redacted:
+redacted, as is anything key-shaped that ended up in another field:
 
 ```bash
 log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
