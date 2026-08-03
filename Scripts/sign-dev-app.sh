@@ -27,6 +27,19 @@ find_developer_id_identity() {
         | awk -F'"' '/Developer ID Application/ {print $2; exit}'
 }
 
+# The local self-signed identity from Scripts/setup-dev-signing.sh, if it exists.
+#
+# Found automatically so a dev build never silently falls back to ad-hoc signing.
+# That matters more than it sounds: an ad-hoc signature has no certificate, so the
+# app's designated requirement pins a cdhash instead — and the cdhash changes on
+# every build, which silently voids the Accessibility grant while System Settings
+# continues to show the app ticked. The symptom is the hotkey doing nothing for no
+# visible reason.
+find_local_dev_identity() {
+    security find-identity -v -p codesigning \
+        | awk -F'"' '/FalaDan Dev Signing/ {print $2; exit}'
+}
+
 choose_identity() {
     if [[ -n "${FALADAN_DEV_CODESIGN_IDENTITY:-}" && "${FALADAN_DEV_CODESIGN_IDENTITY}" != "-" ]]; then
         printf '%s\n' "$FALADAN_DEV_CODESIGN_IDENTITY"
@@ -47,6 +60,13 @@ choose_identity() {
 
     if [[ -n "${DEV_CODESIGN_IDENTITY:-}" && "${DEV_CODESIGN_IDENTITY}" != "-" ]]; then
         printf '%s\n' "$DEV_CODESIGN_IDENTITY"
+        return
+    fi
+
+    local local_dev
+    local_dev=$(find_local_dev_identity)
+    if [[ -n "$local_dev" ]]; then
+        printf '%s\n' "$local_dev"
         return
     fi
 

@@ -18,13 +18,33 @@ Full execution record incl. every review finding and ruling:
 ## What Dan needs to do next
 
 ```bash
-brew install just      # not currently installed
-just dev               # builds, signs, installs to /Applications, launches
+./Scripts/setup-dev-signing.sh   # once per machine — see below
+just reset-tcc                   # only if permissions were granted to an older build
+just dev                         # builds, signs, installs to /Applications, launches
 ```
 
-Then grant **Microphone**, **Accessibility**, and **Input Monitoring** in System Settings →
-Privacy & Security. A rebuild can silently reset the Accessibility grant, which presents as
-the hotkey simply not firing.
+Then grant exactly two permissions in System Settings → Privacy & Security:
+**Microphone** and **Accessibility**.
+
+**Input Monitoring is not needed.** It is the weaker grant for listen-only event taps in apps
+without Accessibility; FalaDan's Fn tap is a modifying tap, so Accessibility covers it. Earlier
+versions of this document said three — that was wrong.
+
+**Why the signing script matters.** macOS remembers a permission grant by the app's designated
+requirement. With no certificate on the machine the app is ad-hoc signed, so that requirement
+pins a cdhash that changes on every build — meaning every `just dev` silently voids
+Accessibility while System Settings still shows the app ticked. The symptom is the hotkey doing
+nothing for no visible reason, and toggling the switch does not fix it because the row is bound
+to a signature that no longer exists.
+
+`setup-dev-signing.sh` creates a local self-signed identity so the requirement pins a
+certificate instead. Run once; `sign-dev-app.sh` finds it by name afterwards, no environment
+variable required. Verify with:
+
+```bash
+codesign -dv --verbose=2 /Applications/FalaDan.app 2>&1 | grep Authority
+# want: Authority=FalaDan Dev Signing    (NOT "Signature=adhoc")
+```
 
 Four checks. Nothing automated reaches any of them.
 
