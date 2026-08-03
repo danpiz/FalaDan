@@ -103,11 +103,60 @@ struct CleanupClient: Sendable {
 
     static func parseResponse(_ data: Data) throws -> String {
         let decoded = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
-        let text =
-            decoded.choices.first?.message.content
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let content = decoded.choices.first?.message.content ?? ""
+        let text = stripReasoningBlocks(from: content)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Also covers "the model returned nothing but reasoning": the caller
+        // treats a throw as a cleanup failure and pastes the raw transcript,
+        // which beats pasting an empty string or a fragment of chain of thought.
         guard !text.isEmpty else { throw CleanupClientError.emptyResponse }
         return text
+    }
+
+    /// Removes reasoning models' chain of thought from a completion.
+    ///
+    /// Reasoning models emit their working inside the response content rather
+    /// than a separate field. Provider choice here is a `.env` base URL and model
+    /// id, so nothing prevents one being configured — and the result would be the
+    /// model's entire deliberation pasted at the user's cursor, in whatever app
+    /// they were typing into.
+    ///
+    /// Deliberately a scanner rather than a regex: it has to handle an unclosed
+    /// opening tag (a completion truncated mid-thought), which is the case a
+    /// naive `<think>.*?</think>` pattern silently misses.
+    static func stripReasoningBlocks(from content: String) -> String {
+        // Matched on the opening delimiter only, so the *word* "think" in an
+        // ordinary transcript is untouched — it is `<think` that marks a block.
+        let openers = ["<think>", "<think ", "<thinking>", "<thinking "]
+        let closers = ["</think>", "</thinking>"]
+
+        var result = content
+        var guardCounter = 0
+
+        while guardCounter < 32 {
+            guardCounter += 1
+            let lower = result.lowercased()
+
+            guard
+                let openRange = openers
+                    .compactMap({ lower.range(of: $0) })
+                    .min(by: { $0.lowerBound < $1.lowerBound })
+            else { break }
+
+            let after = lower[openRange.upperBound...]
+            if let closeRange = closers
+                .compactMap({ after.range(of: $0) })
+                .min(by: { $0.lowerBound < $1.lowerBound })
+            {
+                result.removeSubrange(openRange.lowerBound..<closeRange.upperBound)
+            } else {
+                // No closing tag: the model was cut off mid-reasoning, so
+                // everything from here on is working, not answer.
+                result.removeSubrange(openRange.lowerBound..<result.endIndex)
+                break
+            }
+        }
+        return result
     }
 }
 
