@@ -330,9 +330,11 @@ extension AppState {
                 return
             }
 
-            // Re-transcribed recordings don't carry the cleanup intent
-            // forward — the user can re-record with the Auto-Cleanup
-            // shortcut if they want a polished pass.
+            // Re-transcribing from history copies to the clipboard rather than
+            // pasting, so it is a "get the text back" path, not a dictation.
+            // Cleanup is skipped: it would spend an API call, and a second pass
+            // over already-cleaned text is as likely to drift from what the user
+            // said as to improve it.
             let cleanupResult = await applyAutoCleanup(
                 rawText: result.text, applyCleanup: false)
             let finalText = applyPostProcessing(to: cleanupResult.text)

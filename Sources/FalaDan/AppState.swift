@@ -152,11 +152,19 @@ final class AppState: Sendable {
     /// Incremented on every hold-to-talk press, and stamped onto any release
     /// parked against that press.
     ///
-    /// One exit from `startRecordingFlow` — the `captureTransitionInFlight`
-    /// guard — sits above the `defer` that closes the hold window, so a start
-    /// bailing there leaves the window open and its release available to the
-    /// flow already running. Comparing stamps is what stops that release cutting
-    /// short a recording a different press began.
+    /// Defence in depth, and honestly labelled as such: **on the hotkey path this
+    /// check cannot currently fail.** `beginHoldToTalk` clears
+    /// `pendingHoldRelease` three lines before it bumps this counter, with no
+    /// suspension point between, so a parked release always carries the current
+    /// generation. What actually keeps a stale release from cutting short someone
+    /// else's recording is that clear, plus `endHoldToTalkStartWindow()`.
+    ///
+    /// It is kept because it is cheap and it states the invariant those two rely
+    /// on. It is not, however, a general guard: a start that does not run through
+    /// `beginHoldToTalk` neither clears the parked release nor bumps this counter,
+    /// so a stale release *matches* and gets applied. `toggleRecording()` is that
+    /// path — see the precondition on it. Unreachable today only because nothing
+    /// calls it.
     ///
     /// Wrapping addition: a counter that trapped on overflow would crash the
     /// hotkey path, and only equality is ever compared.
@@ -174,6 +182,17 @@ final class AppState: Sendable {
     /// Kept for the menu bar and any UI affordance that starts a recording
     /// without a key to hold. The hotkey path is `beginHoldToTalk` /
     /// `endHoldToTalk` and no longer routes through here.
+    ///
+    /// **Precondition for any future caller:** clear `pendingHoldRelease` before
+    /// starting. Unlike `beginHoldToTalk`, this path neither clears a parked
+    /// release nor bumps `holdGeneration`, so a release parked by an earlier hold
+    /// still matches the current generation and `applyPendingHoldRelease` would
+    /// apply it — stopping or discarding the recording this call just began. The
+    /// generation check does not catch it; see `holdGeneration`.
+    ///
+    /// Currently uncalled, which is the only reason that is theoretical. Retained
+    /// for the strip phase to decide; do not give it a caller without resolving
+    /// this first.
     func toggleRecording() {
         if recorder.state.isRecording {
             stopAndTranscribe()
@@ -302,13 +321,16 @@ final class AppState: Sendable {
     /// release that outlives its start has nothing to act on and must not survive
     /// to meet the next one.
     ///
-    /// One exit is still not covered here: `guard !captureTransitionInFlight`
-    /// sits above the `defer`, so a hold start bailing there leaves the window
-    /// open. That is handled a level up instead, by `holdGeneration` — a release
-    /// parked by an earlier press no longer matches the current generation and is
-    /// discarded rather than applied. Hoisting the `defer` was the obvious fix and
-    /// the wrong one: a second flow bailing at that guard would then clear a live
-    /// hold's window, which is the same bug pointing the other way.
+    /// `startRecordingFlow`'s `guard !captureTransitionInFlight` sits above the
+    /// `defer` and so is not covered here — but a *hold* start cannot reach it:
+    /// `beginHoldToTalk` checks the same flag first and bails before starting a
+    /// flow at all, which is why the press that would have hit it never bumps
+    /// `holdGeneration`. Its parked release stays owned by the flow already
+    /// running, and that flow's own `defer` clears it.
+    ///
+    /// Hoisting the `defer` above the guard was the obvious fix and the wrong
+    /// one: a second flow bailing there would then clear a live hold's window,
+    /// which is the same bug pointing the other way.
     func endHoldToTalkStartWindow() {
         holdToTalkStartInFlight = false
         pendingHoldRelease = nil

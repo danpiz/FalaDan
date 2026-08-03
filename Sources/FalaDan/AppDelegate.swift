@@ -40,6 +40,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let appState = AppState()
         self.appState = appState
 
+        // The only signal that `.env` was found and how it parsed. Cleanup fails
+        // silently by design — a failed call pastes the raw transcript with no
+        // toast — so without this line "cleanup isn't running" and "cleanup ran
+        // and the model returned the same text" look identical from the outside.
+        // The key is redacted by `EnvConfig.description`, which is what makes it
+        // safe to mark public; nothing else here is a secret.
+        log.info("Loaded config: \(appState.envConfig, privacy: .public)")
+
         setupStatusItem()
         setupPopover()
         observeIconState()
