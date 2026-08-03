@@ -36,7 +36,8 @@ borrowing another app's credentials.
 
 **Config lives in `.env`, not a settings UI.** `~/Library/Application Support/FalaDan/.env`,
 falling back to a repo-root `.env` in dev. Parsed once at launch into an immutable struct.
-Never commit a real `.env`.
+Never commit a real `.env`. This is live as of Phase 2 — see `.env.example` for every
+supported key and its default.
 
 **Keep the app working.** Strategy is rewire-first, strip-last. Behavior changes land one at a
 time on a running app; dead subsystems are deleted at the end. `./Scripts/verify.sh` must pass
