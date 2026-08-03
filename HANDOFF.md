@@ -58,7 +58,8 @@ In this order:
 New in the final review — a diagnostic that did not exist before:
 
 ```bash
-log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
+# /usr/bin/log, not `log` — zsh has a builtin of that name that shadows it
+/usr/bin/log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
 ```
 
 Prints host, whether the key and model are set, and whether cleanup is configured. Nothing

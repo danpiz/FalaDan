@@ -86,7 +86,8 @@ Changing `.env` takes effect on the next launch. To confirm what was loaded — 
 redacted, as is anything key-shaped that ended up in another field:
 
 ```bash
-log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
+# /usr/bin/log, not `log` — zsh has a builtin of that name that shadows it
+/usr/bin/log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
 ```
 
 Everything in it is optional. With no `.env` at all, FalaDan pastes the raw transcript and makes
