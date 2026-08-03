@@ -147,7 +147,20 @@ final class AppState: Sendable {
     /// recorder state would drop the release entirely and leave the microphone
     /// running with nothing left to stop it. Recording the *intent* instead
     /// makes the decision independent of how long the hardware took.
-    private var pendingHoldRelease: HoldToTalkPolicy.Release?
+    private var pendingHoldRelease: (decision: HoldToTalkPolicy.Release, generation: UInt64)?
+
+    /// Incremented on every hold-to-talk press, and stamped onto any release
+    /// parked against that press.
+    ///
+    /// One exit from `startRecordingFlow` — the `captureTransitionInFlight`
+    /// guard — sits above the `defer` that closes the hold window, so a start
+    /// bailing there leaves the window open and its release available to the
+    /// flow already running. Comparing stamps is what stops that release cutting
+    /// short a recording a different press began.
+    ///
+    /// Wrapping addition: a counter that trapped on overflow would crash the
+    /// hotkey path, and only equality is ever compared.
+    private var holdGeneration: UInt64 = 0
 
     /// Whether a hold-to-talk start *this object initiated* is still resolving.
     ///
@@ -188,6 +201,7 @@ final class AppState: Sendable {
         pendingHoldRelease = nil
 
         holdToTalkStartedAt = ProcessInfo.processInfo.systemUptime
+        holdGeneration &+= 1
         holdToTalkStartInFlight = true
         startRecording()
     }
@@ -222,7 +236,7 @@ final class AppState: Sendable {
         // start — possibly one begun by a different shortcut entirely — would
         // consume the stale intent and be cut down immediately.
         guard holdToTalkStartInFlight else { return }
-        pendingHoldRelease = decision
+        pendingHoldRelease = (decision, holdGeneration)
     }
 
     /// Runs a release decision against a live recorder.
@@ -258,7 +272,7 @@ final class AppState: Sendable {
         }
 
         guard holdToTalkStartInFlight else { return }
-        pendingHoldRelease = .discard
+        pendingHoldRelease = (.discard, holdGeneration)
     }
 
     /// Applies a release that arrived before the recorder was live, if one did.
@@ -267,8 +281,14 @@ final class AppState: Sendable {
     /// pending release was consumed.
     @discardableResult
     func applyPendingHoldRelease() -> Bool {
-        guard let decision = pendingHoldRelease else { return false }
+        guard let parked = pendingHoldRelease else { return false }
         pendingHoldRelease = nil
+        // Belongs to an earlier press whose start never completed — applying it
+        // would cut short the recording now starting.
+        guard HoldToTalkPolicy.shouldApplyParkedRelease(
+            parked: parked.generation, current: holdGeneration)
+        else { return false }
+        let decision = parked.decision
         applyHoldRelease(decision)
         return true
     }
@@ -282,13 +302,13 @@ final class AppState: Sendable {
     /// release that outlives its start has nothing to act on and must not survive
     /// to meet the next one.
     ///
-    /// One exit is *not* covered: `guard !captureTransitionInFlight` sits above
-    /// the `defer`, so a hold start bailing there leaves the window open and its
-    /// release can be consumed by the flow already running. Reaching that needs
-    /// two starts within about one main-actor hop. Hoisting the `defer` would not
-    /// fix it and would make things worse — a second flow bailing at that guard
-    /// would then clear a live hold's window. The real fix is a generation token
-    /// on the parked release; deferred rather than bolted on here.
+    /// One exit is still not covered here: `guard !captureTransitionInFlight`
+    /// sits above the `defer`, so a hold start bailing there leaves the window
+    /// open. That is handled a level up instead, by `holdGeneration` — a release
+    /// parked by an earlier press no longer matches the current generation and is
+    /// discarded rather than applied. Hoisting the `defer` was the obvious fix and
+    /// the wrong one: a second flow bailing at that guard would then clear a live
+    /// hold's window, which is the same bug pointing the other way.
     func endHoldToTalkStartWindow() {
         holdToTalkStartInFlight = false
         pendingHoldRelease = nil

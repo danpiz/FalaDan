@@ -69,3 +69,36 @@ struct HoldToTalkReleaseTests {
         #expect(HoldToTalkPolicy.release(heldFor: -3, minimum: 0.15) == .discard)
     }
 }
+
+/// Whether a parked release still belongs to the recording that is starting.
+///
+/// `startRecordingFlow`'s `captureTransitionInFlight` guard sits *above* the
+/// `defer` that closes the hold window, so a hold start bailing there leaves the
+/// window open — and its release can then be consumed by the flow already
+/// running, cutting short a recording a different press began. Matching
+/// generations is what tells the two apart.
+///
+/// Hoisting the `defer` does not fix this and introduces the mirror bug: a second
+/// flow bailing at that guard would clear a live hold's window instead.
+struct HoldReleaseGenerationTests {
+    @Test func aReleaseFromTheCurrentPressApplies() {
+        #expect(HoldToTalkPolicy.shouldApplyParkedRelease(parked: 7, current: 7))
+    }
+
+    @Test func aReleaseFromAnEarlierPressIsDiscarded() {
+        #expect(!HoldToTalkPolicy.shouldApplyParkedRelease(parked: 6, current: 7))
+    }
+
+    /// Defensive: a parked generation ahead of the current one cannot happen by
+    /// construction, and if it ever did the safe reading is "not mine".
+    @Test func aGenerationAheadOfCurrentIsDiscarded() {
+        #expect(!HoldToTalkPolicy.shouldApplyParkedRelease(parked: 8, current: 7))
+    }
+
+    /// The counter wraps rather than trapping, because a trap would crash the
+    /// hotkey path. Only equality is ever compared, so wrapping is harmless —
+    /// but a release parked before a wrap must still not match after it.
+    @Test func wrappingDoesNotMakeStaleReleasesMatch() {
+        #expect(!HoldToTalkPolicy.shouldApplyParkedRelease(parked: .max, current: 0))
+    }
+}
