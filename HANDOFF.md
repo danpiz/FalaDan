@@ -1,102 +1,88 @@
-# HANDOFF — FalaDan Phase 1
+# HANDOFF — FalaDan Phase 2
 
-**State:** code complete, blocked on manual verification by Dan.
-**Branch:** `setup/scaffolding`, 13 commits ahead of `main`. Working tree clean.
-**Verified:** `./Scripts/verify.sh` — build clean, **165 tests in 33 suites passing**.
+**State:** Tasks 1–9 done. Task 10 (docs) and Task 11 (Dan's manual verification) remain,
+then a final whole-branch review.
+**Branch:** `phase-2/env-config-and-cleanup`, off `main` @ `28318c2`. Working tree clean.
+**Verified:** `./Scripts/verify.sh` — **221 tests in 42 suites passing**.
 
-## What Phase 1 did
+## What Phase 2 did
 
-Forked `andyhtran/MiniWhisper` → `danpiz/FalaDan`, renamed everything, and converted the
-recording hotkey from press-to-toggle to true hold-to-talk on the bare **Fn** key, with a
-150 ms minimum-hold guard so a brushed key is discarded rather than transcribed.
+FalaDan now uses Dan's own API key from a `.env` file, cleans up **every** dictation through an
+OpenAI-compatible LLM, and contains no code that borrows another application's credentials.
 
-Design: `docs/superpowers/specs/2026-08-01-faladan-design.md`
-Plan: `docs/superpowers/plans/2026-08-01-rename-and-hold-to-talk.md`
-Full execution record incl. every review finding and ruling:
-`.superpowers/sdd/2026-08-01-rename-and-hold-to-talk/progress.md`
-
-## What Dan needs to do next
+The phase's goal check — this must keep printing `CLEAN`:
 
 ```bash
-./Scripts/setup-dev-signing.sh   # once per machine — see below
-just reset-tcc                   # only if permissions were granted to an older build
-just dev                         # builds, signs, installs to /Applications, launches
+grep -rn --include="*.swift" -e "codex/auth" -e "claude-cli" -e "codex_cli" -e "OAuth" Sources/
 ```
 
-Then grant exactly two permissions in System Settings → Privacy & Security:
-**Microphone** and **Accessibility**.
+Spec: `docs/superpowers/specs/2026-08-02-phase-2-env-config-and-cleanup.md`
+Plan: `docs/superpowers/plans/2026-08-02-phase-2-env-config-and-cleanup.md`
+Full execution record, every review finding and every ruling:
+`.superpowers/sdd/2026-08-02-phase-2-env-config-and-cleanup/progress.md` (git-ignored)
 
-**Input Monitoring is not needed.** It is the weaker grant for listen-only event taps in apps
-without Accessibility; FalaDan's Fn tap is a modifying tap, so Accessibility covers it. Earlier
-versions of this document said three — that was wrong.
+## Done
 
-**Why the signing script matters.** macOS remembers a permission grant by the app's designated
-requirement. With no certificate on the machine the app is ad-hoc signed, so that requirement
-pins a cdhash that changes on every build — meaning every `just dev` silently voids
-Accessibility while System Settings still shows the app ticked. The symptom is the hotkey doing
-nothing for no visible reason, and toggling the switch does not fix it because the row is bound
-to a signature that no longer exists.
+| Task | Outcome |
+|---|---|
+| 1. `EnvConfig` | 1 fix round — guard was not self-sufficient |
+| 2. `CleanupClient` | 1 fix round — quoted values leaked whitespace into the key |
+| 3. Always-on cleanup | 1 fix round — failure log said only "error 2" |
+| 4. Delete `⌥R` shortcut | clean |
+| 5. Delete OAuth stack | clean — **phase goal met** |
+| 6. Delete EditMode (18 files) | clean — found a stranded Keychain key |
+| 7. Rename flag, tidy UI, sweep key | 1 fix round — migration gave up on failure |
+| 8. Wire `MIN_HOLD_MS` / `MIN_TRANSCRIBE_MS` | clean |
+| 9. Generation token | clean — closes the last Phase 1 leftover |
+| — | Out of plan: strip `<think>` reasoning blocks |
 
-`setup-dev-signing.sh` creates a local self-signed identity so the requirement pins a
-certificate instead. Run once; `sign-dev-app.sh` finds it by name afterwards, no environment
-variable required. Verify with:
+## Remaining
 
-```bash
-codesign -dv --verbose=2 /Applications/FalaDan.app 2>&1 | grep Authority
-# want: Authority=FalaDan Dev Signing    (NOT "Signature=adhoc")
-```
+**Task 10** — `.env.example`, rewrite the README for FalaDan (it still describes MiniWhisper),
+note the **two** permissions (Microphone + Accessibility, *not* Input Monitoring), and mention
+`./Scripts/setup-dev-signing.sh` for contributors. Full step list in the plan.
 
-Four checks. Nothing automated reaches any of them.
+**Task 11 — Dan, at the keyboard.** In this order:
 
-1. **Hold-to-talk timing.** Hold Fn, speak, release. Does recording start and stop with the
-   key, with no clipped first syllable and no lag after release?
-2. **Tap guard.** Brush Fn quickly without speaking. Nothing transcribed, nothing pasted, and
-   — this is the part that was broken and fixed — **no "Canceled recording" row in history**.
-3. **Fn as a modifier.** Hold Fn for a beat, then press `←`. Nothing should be transcribed or
-   pasted. This was the last bug found; it previously pasted ambient room audio into whatever
-   app you were navigating.
-4. **End to end.** Cursor in Notes or Slack, hold Fn, speak a sentence, release. Text lands at
-   the cursor, prior clipboard restored.
+1. **Move `.env` aside first and dictate with no config at all.** Most important check in the
+   phase: cleanup is on by default, so `isCleanupConfigured` returning false is the only thing
+   stopping a failed network call per utterance. Behaviour must be identical to Phase 1.
+2. Restore `.env`, dictate *"um so the meeting is at three pm scratch that four pm and their
+   going to deploy it"* — expect *"The meeting is at 4pm, and they're going to deploy it."*
+3. **Judge the latency.** Measured at ~0.5s with `llama-3.3-70b-versatile`. Only Dan can say
+   whether that feels right; if not, the answer is a faster model or `LLM_CLEANUP=off`, not code.
+4. Set an invalid key and confirm dictation still pastes raw text with no dialog. Then check
+   the log says `HTTP 401` rather than `error 2`.
+5. Dictate a proper noun (*"tell Sarah the meeting moved to Lisbon"*) — `applyFormatting` runs
+   *after* cleanup, so with `capitalization == .casual` it can lowercase what cleanup correctly
+   capitalised. Pre-existing ordering, now universal.
 
-If all four pass:
+**Then** the final whole-branch review, pointed at the ledger's deferred-minor list.
 
-```bash
-git checkout main
-git merge --no-ff setup/scaffolding -m "Merge Phase 1: FalaDan rename and hold-to-talk"
-./Scripts/verify.sh
-git push -u origin main
-```
+## Dan's environment, already set up
 
-If any fail, record which one and the exact observed behavior here, and diagnose with
-`superpowers:systematic-debugging` before attempting a fix.
+- `~/Library/Application Support/FalaDan/.env`, mode 600 — Groq key, `llama-3.3-70b-versatile`
+- Local signing identity exists, so Accessibility survives rebuilds. Verify with:
+  `codesign -dv --verbose=2 /Applications/FalaDan.app 2>&1 | grep Authority` → want
+  `Authority=FalaDan Dev Signing`, **not** `Signature=adhoc`
 
-## Things worth knowing before touching this code
+## Things that will bite otherwise
 
 - **`./Scripts/verify.sh` is the only verification command.** Bare `swift test` fails on this
-  machine: Command Line Tools ships Swift Testing's framework and its interop dylib in two
-  different unsearched directories, so it fails first at compile and then at dlopen.
-- **Never reintroduce credential reuse.** Upstream reads OAuth tokens from the Keychain and
-  `~/.codex/auth.json` and spoofs Claude Code / Codex CLI identity headers. That path is
-  deliberately deleted. All API access uses Dan's own keys from `.env`.
-- **Fn, not Right Option.** The bare-modifier tap is Fn-only by design; any other bare modifier
-  would mean generalizing four files inside the event tap.
+  machine — Swift Testing's framework and its interop dylib sit in two unsearched directories.
+- **Never reintroduce credential reuse.** That grep at the top is the guard.
+- **Model benchmark (Dan's key, real prompt):** `llama-3.3-70b-versatile` 0.51s (best, nothing
+  dropped) · `llama-3.1-8b-instant` 0.48s (drops a clause) · `openai/gpt-oss-20b` 0.83s ·
+  `qwen/qwen3.6-27b` 4.13s and emits `<think>` blocks.
+- **Reasoning models paste their chain of thought** unless stripped. Qwen returned 4,175 chars
+  around a 55-char answer. `CleanupClient.stripReasoningBlocks` handles it; there is a
+  verbatim-capture regression fixture in `CleanupReasoningFixtureTests.swift`.
 
 ## Deferred, with reasons
 
-- **Generation token on the parked hold release.** One `startRecordingFlow` exit sits above the
-  `defer` that closes the hold window, so a hold start bailing there can have its release
-  consumed by the flow already running. Reaching it needs two starts within ~one main-actor
-  hop. Documented in `AppState.swift`, not papered over. Phase 2.
-- **Edit mode's 0.5 s floor** is now stricter than recording's 0.3 s. Edit mode is deleted in
-  Phase 3.
-- **`AppState.toggleRecording()`** has no remaining call site. Retained deliberately; the strip
-  phase decides its fate.
-- `.github/workflows/ci.yml`, `appcast.xml`, `ReleaseNotes/`, and the MiniWhisper wordmark
-  still carry the old name — all deleted or rewritten in Phase 5.
-- `Package.swift` intentionally keeps one `andyhtran/MiniWhisper` URL: the upstream
-  whisper.xcframework release asset. **Rewriting it breaks the build.**
-
-## Then: Phase 2
-
-`.env` config loader (`EnvConfig`) and provider selection. Needs its own spec read and plan —
-see the "Next plans" section at the end of the Phase 1 plan.
+- Edit mode's old 0.5s floor is gone with the feature; recording's floor is now `.env`-driven.
+- `MenuBarView.cleanupCharThreshold` lowered 30k → 4k by estimate, not measurement.
+- `unrelatedShortcutsAllSurvive` asserts a count that a duplicate name would also satisfy.
+  Pre-existing; closer to trivial now the enum has two cases.
+- `AppState.toggleRecording()` still has no callers. Retained deliberately; the strip phase
+  (Phase 5) decides its fate.
