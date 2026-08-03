@@ -44,10 +44,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // silently by design — a failed call pastes the raw transcript with no
         // toast — so without this line "cleanup isn't running" and "cleanup ran
         // and the model returned the same text" look identical from the outside.
-        // Safe to mark public because `EnvConfig.description` redacts every field
-        // that could hold a credential — not just the key field, since the
-        // realistic slip is a key pasted into the wrong line of `.env`.
-        log.info("Loaded config: \(appState.envConfig, privacy: .public)")
+        // Safe to mark public because `EnvConfig.description` echoes no
+        // user-supplied string at all — see its doc comment for why filtering
+        // key-shaped values instead does not work.
+        //
+        // `notice`, not `info`. Info-level messages go to a memory ring buffer
+        // and are not persisted, so `log show` cannot retrieve them after the
+        // fact — which is the only way this line ever gets read. Notice is the
+        // lowest level that survives to disk.
+        log.notice("Loaded config: \(appState.envConfig, privacy: .public)")
 
         setupStatusItem()
         setupPopover()
