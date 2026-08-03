@@ -50,7 +50,7 @@ project (`MenuBarView` 27KB, `SettingsWindowView` 25KB, `ModelPickerView` 18KB).
 |---|---|---|
 | Scope | Config + OAuth/EditMode deletion + cleanup client, together | §2 — they are one change |
 | Cleanup trigger | **Always on**, `⌥R` deleted | PRD requirement #4; a second shortcut is not what the app promises |
-| LLM API shape | **OpenAI-compatible only** | One client covers Groq, OpenAI, OpenRouter, Ollama and local servers. Anthropic's Messages API differs and is not worth a second parser in a phase about reducing surface area |
+| LLM API shape | **OpenAI-compatible only** | One client covers Groq, OpenAI, **Google Gemini** (via its OpenAI-compatibility layer), OpenRouter, Ollama and local servers — provider choice becomes a base URL, not a code path. Anthropic's Messages API differs and is not worth a second parser in a phase about reducing surface area |
 | Default provider | **Groq** | Cleanup latency sits between key-release and paste, where it is felt directly |
 | Settings UI | **Kept**; `.env` overrides where a key is set | Deleting ~60KB of SwiftUI is its own project. Precedence keeps the model picker and mic selector working |
 | Testing | **Keep extracting pure types** | The `HoldToTalkPolicy` pattern. No protocol-ised `AppState` seam — not worth refactoring code slated for deletion |
@@ -80,6 +80,25 @@ on their own schedule, and a hardcoded default becomes a silent failure the day 
 deprecated. Requiring it means the failure is "you did not configure this", which is
 actionable, instead of "the model you never chose no longer exists". `.env.example` carries a
 working value and is easy to keep current; a compiled-in constant is not.
+
+**Supported providers.** Because the client speaks the OpenAI chat-completions shape, provider
+choice is entirely a matter of `LLM_BASE_URL` — no code path per provider:
+
+| Provider | `LLM_BASE_URL` |
+|---|---|
+| Groq (default) | `https://api.groq.com/openai/v1` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| OpenAI | `https://api.openai.com/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+| Ollama / LM Studio (local) | `http://localhost:11434/v1` |
+
+Google's Gemini Flash models are reachable through Google's OpenAI-compatibility layer, so they
+need no special casing — verified at
+<https://ai.google.dev/gemini-api/docs/openai>. Anthropic is the notable exception, and the
+reason it is out of scope: its Messages API is a different request and response shape.
+
+`.env.example` ships the Groq configuration commented alongside a Gemini one, so switching
+provider is uncommenting two lines.
 
 Parsing rules, all of which are testable without a filesystem by parsing from a string:
 
