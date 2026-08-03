@@ -224,8 +224,8 @@ private struct HistoryPopoverRow: View {
             if let editDuration = editMode.editDuration {
                 parts.append(formatEditDuration(editDuration))
             }
-            parts.append(friendlyEditModelName(
-                backend: EditModeBackend(rawValue: editMode.backend),
+            parts.append(friendlyEditBackendName(
+                backend: editMode.backend,
                 model: editMode.backendModel))
             if let instruction = recording.transcription?.text, !instruction.isEmpty {
                 parts.append("\u{201C}\(instruction)\u{201D}")
@@ -237,7 +237,7 @@ private struct HistoryPopoverRow: View {
             if let duration = cleanup.cleanupDuration, duration > 0 {
                 parts.append(formatEditDuration(duration))
             }
-            parts.append(friendlyEditModelName(
+            parts.append(friendlyEditBackendName(
                 backend: nil, model: cleanup.backendModel))
             return parts.joined(separator: " · ")
         }
@@ -252,7 +252,7 @@ private struct HistoryPopoverRow: View {
                 if total > 0 {
                     parts.append(formatEditDuration(total))
                 }
-                parts.append(friendlyEditModelName(
+                parts.append(friendlyEditBackendName(
                     backend: nil, model: cleanup.backendModel))
             } else {
                 // Plain voice: latency before the transcription model,
@@ -274,17 +274,20 @@ private struct HistoryPopoverRow: View {
         return nil
     }
 
-    /// New edit-mode entries carry an explicit backend tag — authoritative.
+    /// Edit-mode entries (from the now-deleted edit-selection feature)
+    /// carried an explicit backend tag — authoritative when present.
     /// Legacy entries and cleanup entries (which never stored a backend)
     /// fall back to a prefix sniff on the model string; unknown values
-    /// land on "Custom" since that's the only third option in the picker.
-    private func friendlyEditModelName(backend: EditModeBackend?, model: String) -> String {
-        if let backend {
-            switch backend {
-            case .claudeCli: return "Claude Code"
-            case .codexCli: return "Codex CLI"
-            case .customApi: return "Custom"
-            }
+    /// land on "Custom" since that's the only third option the old
+    /// picker offered. `backend` is the raw stored string — formerly
+    /// typed as an enum, which was deleted along with the feature that
+    /// produced it.
+    private func friendlyEditBackendName(backend: String?, model: String) -> String {
+        switch backend {
+        case "claude": return "Claude Code"
+        case "codex": return "Codex CLI"
+        case "custom-api": return "Custom"
+        default: break
         }
         let lower = model.lowercased()
         if lower.hasPrefix("claude") { return "Claude Code" }
@@ -328,10 +331,17 @@ private struct HistoryPopoverRow: View {
                 }
                 .disabled(isRetranscribeDisabled)
 
-                Button("Re-transcribe with cleanup") {
-                    appState.retranscribeAsNew(recording, applyCleanup: true)
+                // Hidden rather than merely disabled when cleanup isn't
+                // configured: `applyAutoCleanup`'s own guard would silently
+                // skip the call and hand back the raw transcript, so without
+                // this the menu item would appear to succeed and change
+                // nothing — a silent no-op is worse than an absent control.
+                if appState.envConfig.isCleanupConfigured {
+                    Button("Re-transcribe with cleanup") {
+                        appState.retranscribeAsNew(recording, applyCleanup: true)
+                    }
+                    .disabled(isRetranscribeDisabled)
                 }
-                .disabled(isRetranscribeDisabled)
             }
             Button("Show metadata") {
                 let metadataURL = recording.storageDirectory

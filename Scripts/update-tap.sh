@@ -33,10 +33,10 @@ cask "faladan" do
   version "${MARKETING_VERSION}"
   sha256 "${SHA}"
 
-  url "https://github.com/andyhtran/FalaDan/releases/download/v#{version}/FalaDan-#{version}.zip"
+  url "https://github.com/danpiz/FalaDan/releases/download/v#{version}/FalaDan-#{version}.zip"
   name "FalaDan"
   desc "Voice-to-text transcription from the menu bar"
-  homepage "https://github.com/andyhtran/FalaDan"
+  homepage "https://github.com/danpiz/FalaDan"
 
   auto_updates true
   # bare symbol means ">= Sonoma"

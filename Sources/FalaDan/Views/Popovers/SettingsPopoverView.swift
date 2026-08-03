@@ -17,10 +17,6 @@ struct SettingsPopoverView: View {
             errorNotificationsRow
             trimLongSilencesRow
 
-            if appState.editModeBehavior.selectionEnabled {
-                selectedTextActionRow
-            }
-
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
@@ -34,7 +30,7 @@ struct SettingsPopoverView: View {
                     )
                 }
 
-                if !appState.editModeBehavior.isOff {
+                if appState.envConfig.isCleanupConfigured {
                     cleanupPromptRow
                 }
             }
@@ -154,36 +150,6 @@ struct SettingsPopoverView: View {
             )
             .toggleStyle(.switch)
             .labelsHidden()
-        }
-    }
-
-    private var selectedTextActionRow: some View {
-        HStack(spacing: 8) {
-            InfoLabel(
-                title: "Selected text action",
-                text: "Clean automatically rewrites selected text immediately. Dictate instruction lets you speak how to change it."
-            )
-            .font(.system(size: 13))
-
-            Spacer(minLength: 8)
-
-            Picker(
-                "",
-                selection: Binding(
-                    get: { appState.voiceEditEnabled },
-                    set: { enabled in
-                        appState.voiceEditEnabled = enabled
-                        EditModeSettings.voiceEdit = enabled
-                    }
-                )
-            ) {
-                Text("Clean automatically").tag(false)
-                Text("Dictate instruction").tag(true)
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .controlSize(.small)
-            .frame(maxWidth: 145)
         }
     }
 

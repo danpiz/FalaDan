@@ -2,23 +2,11 @@ import SwiftUI
 
 struct ModelPickerView: View {
     @Environment(AppState.self) private var appState
-    @State private var editModel: EditModeModel = EditModeSettings.model
 
     var body: some View {
         @Bindable var appState = appState
 
         VStack(alignment: .leading, spacing: 6) {
-            // Edit model section ranks above transcription when any AI
-            // editing is on — those users invoke it more often than they
-            // switch transcription models, so it's the more useful
-            // default-top.
-            if !appState.editModeBehavior.isOff {
-                editModelSection
-                Divider()
-                    .padding(.horizontal, 10)
-                    .padding(.top, 6)
-            }
-
             transcriptionModelSection
         }
         .padding(12)
@@ -26,12 +14,6 @@ struct ModelPickerView: View {
         .onChange(of: appState.customProviderSettings) {
             appState.customProviderSettings.save()
             appState.refreshCustomTranscriptionReadiness()
-        }
-        .onChange(of: appState.customEditProviderSettings) {
-            appState.customEditProviderSettings.save()
-        }
-        .onAppear {
-            editModel = EditModeSettings.model
         }
     }
 
@@ -45,7 +27,6 @@ struct ModelPickerView: View {
             .textCase(.uppercase)
             .tracking(0.5)
             .padding(.horizontal, 10)
-            .padding(.top, !appState.editModeBehavior.isOff ? 4 : 0)
 
         VStack(spacing: 2) {
             ModelRow(
@@ -90,65 +71,6 @@ struct ModelPickerView: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 4)
         }
-    }
-
-    @ViewBuilder
-    private var editModelSection: some View {
-        Text("Edit Model")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(.secondary)
-            .textCase(.uppercase)
-            .tracking(0.5)
-            .padding(.horizontal, 10)
-
-        VStack(spacing: 2) {
-            ModelRow(
-                icon: "bolt.horizontal.fill",
-                title: "Codex CLI",
-                subtitle: "OpenAI · \(EditModeModel.gpt5Mini.rawValue)",
-                badge: nil,
-                isSelected: editModel == .gpt5Mini
-            ) {
-                selectEditModel(.gpt5Mini)
-            }
-
-            ModelRow(
-                icon: "hare.fill",
-                title: "Claude Code",
-                subtitle: "Anthropic · \(EditModeModel.claudeHaiku45.rawValue)",
-                badge: nil,
-                isSelected: editModel == .claudeHaiku45
-            ) {
-                selectEditModel(.claudeHaiku45)
-            }
-
-            ModelRow(
-                icon: "server.rack",
-                title: "Custom",
-                subtitle: "OpenAI-compatible endpoint",
-                badge: nil,
-                isSelected: editModel == .custom
-            ) {
-                selectEditModel(.custom)
-            }
-        }
-
-        // Inline configuration for the Custom edit row, mirroring the
-        // transcription side. Only renders when Custom is actually
-        // selected — the built-in models need no URL/key/model config.
-        if editModel == .custom {
-            Divider()
-                .padding(.horizontal, 10)
-                .padding(.top, 4)
-            CustomEditEndpointSection()
-                .padding(.horizontal, 10)
-                .padding(.top, 4)
-        }
-    }
-
-    private func selectEditModel(_ model: EditModeModel) {
-        editModel = model
-        EditModeSettings.model = model
     }
 }
 
@@ -364,148 +286,6 @@ private struct CustomEndpointSection: View {
 
     private func maskedAPIKey(_ key: String) -> String {
         key.isEmpty ? "" : String(repeating: "•", count: min(key.count, 32))
-    }
-}
-
-// MARK: - Custom Edit Endpoint Section
-
-/// Edit-side mirror of `CustomEndpointSection`. Same edit-gated pattern
-/// — fields render as selectable read-only text by default, swap to
-/// real `TextField`s only while the user is actively editing — for the
-/// same reasons (avoid select-all-on-focus value loss; minimize the
-/// window in which a field editor can be first responder when popovers
-/// switch, which has triggered the crash class documented in
-/// PopoverResponderReset.swift).
-private struct CustomEditEndpointSection: View {
-    @Environment(AppState.self) private var appState
-
-    @State private var isEditing = false
-    @State private var draftURL = ""
-    @State private var draftAPIKey = ""
-    @State private var draftModel = ""
-
-    @FocusState private var focusedField: Field?
-
-    private enum Field: Hashable {
-        case url, apiKey, model
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
-
-            if isEditing {
-                fieldRow(label: "Endpoint URL") {
-                    TextField(
-                        "https://api.example.com/v1/chat/completions",
-                        text: $draftURL
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
-                    .focused($focusedField, equals: .url)
-                    .onSubmit(confirm)
-                }
-
-                fieldRow(label: "API Key (optional)") {
-                    SecureField("sk-...", text: $draftAPIKey)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12))
-                        .focused($focusedField, equals: .apiKey)
-                        .onSubmit(confirm)
-                }
-            }
-
-            fieldRow(label: "Model Name") {
-                if isEditing {
-                    TextField("gpt-4o-mini", text: $draftModel)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 12))
-                        .focused($focusedField, equals: .model)
-                        .onSubmit(confirm)
-                } else {
-                    ReadOnlyFieldDisplay(
-                        text: appState.customEditProviderSettings.modelName,
-                        placeholder: "Not set"
-                    )
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("Configuration")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-            Spacer()
-            if isEditing {
-                HStack(spacing: 6) {
-                    Button(action: cancel) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Cancel")
-                    .keyboardShortcut(.cancelAction)
-
-                    Button(action: confirm) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Save")
-                    .keyboardShortcut(.defaultAction)
-                }
-            } else {
-                Button(action: beginEditing) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Edit")
-            }
-        }
-    }
-
-    private func fieldRow<Content: View>(
-        label: String, @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.secondary)
-            content()
-        }
-    }
-
-    private func beginEditing() {
-        draftURL = appState.customEditProviderSettings.endpointURL
-        draftAPIKey = appState.customEditProviderSettings.apiKey
-        draftModel = appState.customEditProviderSettings.modelName
-        isEditing = true
-        DispatchQueue.main.async {
-            focusedField = .url
-        }
-    }
-
-    private func confirm() {
-        var updated = appState.customEditProviderSettings
-        updated.endpointURL = draftURL
-        updated.apiKey = draftAPIKey
-        updated.modelName = draftModel
-        appState.customEditProviderSettings = updated
-        focusedField = nil
-        isEditing = false
-    }
-
-    private func cancel() {
-        focusedField = nil
-        isEditing = false
     }
 }
 

@@ -3,7 +3,6 @@ import Security
 
 private enum CustomProviderAPIKeyKind: String, Sendable {
     case transcription = "custom-transcription"
-    case edit = "custom-edit"
 }
 
 enum CustomProviderAPIKeyStore {
@@ -16,15 +15,6 @@ enum CustomProviderAPIKeyStore {
     @discardableResult
     static func saveTranscriptionKey(_ key: String) -> Bool {
         save(key, for: .transcription)
-    }
-
-    static func editKey() -> String {
-        read(.edit) ?? ""
-    }
-
-    @discardableResult
-    static func saveEditKey(_ key: String) -> Bool {
-        save(key, for: .edit)
     }
 
     private static func read(_ kind: CustomProviderAPIKeyKind) -> String? {

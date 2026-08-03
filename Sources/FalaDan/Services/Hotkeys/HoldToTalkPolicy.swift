@@ -48,4 +48,18 @@ enum HoldToTalkPolicy {
         guard let heldFor else { return .transcribe }
         return shouldTranscribe(heldFor: heldFor, minimum: minimum) ? .transcribe : .discard
     }
+
+    /// Whether a parked release belongs to the start now completing.
+    ///
+    /// A release can be recorded before the recorder is live, to be applied once
+    /// it comes up. But one exit from the start flow leaves that window open
+    /// without ever applying the release, so the *next* start — possibly one a
+    /// different shortcut began — could consume it and be cut short. Stamping
+    /// each release with the generation of the press that made it, and checking
+    /// the stamp before applying, is what keeps them apart.
+    ///
+    /// Pure so the rule is testable; the counter itself lives on `AppState`.
+    static func shouldApplyParkedRelease(parked: UInt64, current: UInt64) -> Bool {
+        parked == current
+    }
 }

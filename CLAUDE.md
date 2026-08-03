@@ -35,8 +35,15 @@ OpenAI. That entire path is deliberately deleted. All API access uses Dan's own 
 borrowing another app's credentials.
 
 **Config lives in `.env`, not a settings UI.** `~/Library/Application Support/FalaDan/.env`,
-falling back to a repo-root `.env` in dev. Parsed once at launch into an immutable struct.
-Never commit a real `.env`.
+falling back to `$PWD/.env`. Parsed once at launch into an immutable struct. Never commit a
+real `.env`. This is live as of Phase 2 — see `.env.example` for every supported key and its
+default.
+
+The fallback is cwd-relative, not repo-relative, so it does **not** fire under `just dev`: that
+installs to `/Applications` and launches with `open`, giving the app a working directory of `/`.
+Put the file in Application Support. `AppDelegate` logs the parsed config (key redacted) at
+launch — that line is the only way to tell "no `.env` found" from "cleanup ran and changed
+nothing", since cleanup failure is silent by design.
 
 **Keep the app working.** Strategy is rewire-first, strip-last. Behavior changes land one at a
 time on a running app; dead subsystems are deleted at the end. `./Scripts/verify.sh` must pass

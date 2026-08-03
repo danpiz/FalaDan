@@ -100,7 +100,7 @@ extension AppState {
         // decorative — every hold between 0.15s and 1.0s passed the policy and
         // then died here with an error toast, so a deliberate short word
         // ("yes", "undo") could not be dictated at all.
-        guard duration >= 0.3 else {
+        guard duration >= envConfig.minTranscribe else {
             let recordingId = currentRecordingId
             await recorder.cancelRecording()
             recorder.reset()
@@ -126,11 +126,12 @@ extension AppState {
         let recordingId = currentRecordingId ?? Recording.generateId()
         currentRecordingId = nil
 
-        // Snapshot + clear the cleanup flag before running transcribe.
-        // Whether the recording was started via the Auto-Cleanup shortcut
-        // is fixed at start time; stopping doesn't change the intent.
-        let applyCleanup = cleanupRequestedForCurrentRecording
-        cleanupRequestedForCurrentRecording = false
+        // Cleanup now runs on every dictation, so this is read from config
+        // rather than from what the user pressed. `isCleanupConfigured` is
+        // what keeps an unconfigured install working: with no key set, the
+        // call is skipped and the raw transcript is pasted, exactly as it
+        // was before this phase.
+        let applyCleanup = envConfig.isCleanupConfigured
 
         await transcribe(
             audioURL: audioURL,
@@ -211,7 +212,6 @@ extension AppState {
 
         guard recorder.state.isRecording else { return }
 
-        cleanupRequestedForCurrentRecording = false
         stopDurationChecks()
         onRecordingEnded?()
 
@@ -233,7 +233,6 @@ extension AppState {
 
         guard recorder.state.isRecording else { return }
 
-        cleanupRequestedForCurrentRecording = false
         stopDurationChecks()
         onRecordingEnded?()
 

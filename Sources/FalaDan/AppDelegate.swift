@@ -23,6 +23,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         UNUserNotificationCenter.current().delegate = self
 
+        // Sweep of state stranded by the deleted edit-mode feature: a
+        // Keychain-stored API key with no code left to reach it, plus a
+        // handful of inert UserDefaults keys. Safe to call on every launch —
+        // it no-ops once the Keychain item is confirmed gone, and retries
+        // cheaply on a transient failure rather than giving up. See
+        // LegacyEditModeCleanup.
+        LegacyEditModeCleanup.runOnce()
+
         // Disable App Nap for reliable background operation
         appNapActivity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiatedAllowingIdleSystemSleep, .suddenTerminationDisabled],
@@ -31,6 +39,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let appState = AppState()
         self.appState = appState
+
+        // The only signal that `.env` was found and how it parsed. Cleanup fails
+        // silently by design — a failed call pastes the raw transcript with no
+        // toast — so without this line "cleanup isn't running" and "cleanup ran
+        // and the model returned the same text" look identical from the outside.
+        // Safe to mark public because `EnvConfig.description` echoes no
+        // user-supplied string at all — see its doc comment for why filtering
+        // key-shaped values instead does not work.
+        //
+        // `notice`, not `info`. Info-level messages go to a memory ring buffer
+        // and are not persisted, so `log show` cannot retrieve them after the
+        // fact — which is the only way this line ever gets read. Notice is the
+        // lowest level that survives to disk.
+        log.notice("Loaded config: \(appState.envConfig, privacy: .public)")
 
         setupStatusItem()
         setupPopover()
@@ -154,7 +176,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         withObservationTracking {
             _ = self.appState.recorder.state
             _ = self.appState.recorder.meterLevel
-            _ = self.appState.isEditModeProcessing
+            _ = self.appState.isCleanupProcessing
         } onChange: {
             Task { @MainActor [weak self] in
                 self?.updateIcon()
@@ -165,12 +187,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateIcon() {
         let isWorking =
-            appState.recorder.state == .processing || appState.isEditModeProcessing
+            appState.recorder.state == .processing || appState.isCleanupProcessing
         syncProcessingAnimation(active: isWorking)
         statusItem.button?.image = MenuBarIconRenderer.render(
             state: appState.recorder.state,
             meterLevel: appState.recorder.meterLevel,
-            isEditModeProcessing: appState.isEditModeProcessing,
+            isCleanupProcessing: appState.isCleanupProcessing,
             processingPhase: processingAnimationPhase
         )
     }
@@ -406,18 +428,6 @@ final class HotkeyDelegateImpl: HotkeyManagerDelegate {
     nonisolated func hotkeyDidCancelRecording() {
         Task { @MainActor in
             self.appState?.cancelRecording()
-        }
-    }
-
-    nonisolated func hotkeyDidToggleAutoCleanupRecording() {
-        Task { @MainActor in
-            self.appState?.toggleAutoCleanupRecording()
-        }
-    }
-
-    nonisolated func hotkeyDidEditSelection() {
-        Task { @MainActor in
-            self.appState?.editSelection()
         }
     }
 }

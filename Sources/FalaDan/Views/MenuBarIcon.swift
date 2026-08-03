@@ -3,7 +3,7 @@ import SwiftUI
 /// Renders all menu bar icon states into NSImage so the view identity stays
 /// stable across state transitions (no flicker). Idle rasterizes an SF
 /// Symbol; recording draws red level-tracking bars; the working states
-/// (transcription, edit-mode AI call) draw pulsing bars whose phase must be
+/// (transcription, cleanup LLM call) draw pulsing bars whose phase must be
 /// advanced by an external timer — nothing observable ticks while they run.
 enum MenuBarIconRenderer {
     // Bar geometry for the recording meter
@@ -14,13 +14,13 @@ enum MenuBarIconRenderer {
     private static let minFraction: CGFloat = 0.2
 
     static func render(
-        state: RecordingState, meterLevel: Double, isEditModeProcessing: Bool = false,
+        state: RecordingState, meterLevel: Double, isCleanupProcessing: Bool = false,
         processingPhase: Double = 0
     ) -> NSImage {
-        // Edit-mode AI call wins over the generic processing icon — the
-        // user pressed a different shortcut for a different operation, so
-        // the menu bar should reflect that's what's running (distinct tint).
-        if isEditModeProcessing {
+        // Cleanup's LLM call wins over the generic processing icon — it's a
+        // distinct step of the same dictation flow, so the menu bar should
+        // reflect that's what's running now (distinct tint).
+        if isCleanupProcessing {
             return renderPulsingBars(phase: processingPhase, color: .systemPurple)
         }
         switch state {
@@ -132,8 +132,8 @@ enum MenuBarIconRenderer {
         return drawBars(heightFractions: scales.map { effectiveLevel * $0 }, color: .systemRed)
     }
 
-    /// Calm pulsing bars for the "working" states (transcription, edit-mode
-    /// AI call). Same geometry as the recording meter but a non-red tint and
+    /// Calm pulsing bars for the "working" states (transcription, cleanup
+    /// LLM call). Same geometry as the recording meter but a non-red tint and
     /// a self-driven wave, so "working" reads differently from "listening"
     /// while still clearly not idle.
     private static func renderPulsingBars(phase: Double, color: NSColor) -> NSImage {

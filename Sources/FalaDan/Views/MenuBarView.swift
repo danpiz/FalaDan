@@ -134,7 +134,7 @@ private struct RecordingHeaderView: View {
         if !appState.permissions.allGranted {
             return "Permissions Required"
         }
-        if appState.isEditModeProcessing { return editingStatusText }
+        if appState.isCleanupProcessing { return editingStatusText }
         switch appState.recorder.state {
         case .idle:
             if appState.transcriptionMode == .custom
@@ -186,12 +186,24 @@ private struct RecordingHeaderView: View {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
-    /// Surfaces the selection size for larger edits so the user knows
-    /// why it might take a bit. Below the threshold the count is noise,
-    /// so we keep the plain "Editing…" treatment.
+    /// Above this, cleanup is polishing enough text that the menu bar
+    /// surfaces the char count so the user knows why it might take a
+    /// bit. Below it, the count is noise, so the status stays the plain
+    /// "Editing…" treatment.
+    ///
+    /// Recordings are capped at `AppState.maxRecordingDuration` (600s),
+    /// which tops out around 9k characters of transcript — so this has to
+    /// sit well under that to ever fire. 4,000 (roughly 4-5 minutes of
+    /// continuous speech) is reachable by a genuinely long dictation while
+    /// still keeping the char count reserved for the sessions long enough
+    /// to justify it, rather than showing on nearly every cleanup pass.
+    private static let cleanupCharThreshold = 4_000
+
+    /// Surfaces the cleanup-pass size for larger transcripts so the user
+    /// knows why it might take a bit.
     private var editingStatusText: String {
-        let count = appState.editModeProcessingCharCount
-        guard count >= EditModeProvider.softCharThreshold else {
+        let count = appState.cleanupProcessingCharCount
+        guard count >= Self.cleanupCharThreshold else {
             return "Editing..."
         }
         let formatted = count.formatted(.number.grouping(.automatic))
@@ -380,14 +392,6 @@ private struct ShortcutSection: View {
             SectionHeader(title: "Shortcut", icon: "command")
 
             ShortcutRow(label: "Toggle Recording", name: .toggleRecording)
-
-            if appState.autoCleanupEnabled {
-                ShortcutRow(label: "Cleanup Recording", name: .autoCleanupRecording)
-            }
-
-            if appState.selectionEnabled {
-                ShortcutRow(label: "Edit Selection", name: .editSelection)
-            }
         }
     }
 }
@@ -740,16 +744,9 @@ private struct FooterBarView: View {
 
     // Custom mode selected but the endpoint isn't configured yet — surface
     // as orange on the Model footer button, which is now where the user
-    // resolves the gap (the config UI lives inside that popover). Mirror
-    // the same warning when the *edit* model is Custom but its endpoint
-    // is unconfigured — same UI affordance, same fix path.
+    // resolves the gap (the config UI lives inside that popover).
     private var needsCustomConfigAttention: Bool {
-        let transcriptionNeedsConfig = appState.transcriptionMode == .custom
-            && !appState.customProviderSettings.isConfigured
-        let editNeedsConfig = !appState.editModeBehavior.isOff
-            && EditModeSettings.model == .custom
-            && !appState.customEditProviderSettings.isConfigured
-        return transcriptionNeedsConfig || editNeedsConfig
+        appState.transcriptionMode == .custom && !appState.customProviderSettings.isConfigured
     }
 
     private var modelPickerColor: Color {

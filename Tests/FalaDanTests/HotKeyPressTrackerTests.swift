@@ -40,9 +40,9 @@ struct HotKeyPressTrackerTests {
     @Test func secondReleaseIsIgnored() {
         var tracker = HotKeyPressTracker()
 
-        _ = tracker.press(.editSelection)
-        let first = tracker.release(.editSelection)
-        let second = tracker.release(.editSelection)
+        _ = tracker.press(.cancelRecording)
+        let first = tracker.release(.cancelRecording)
+        let second = tracker.release(.cancelRecording)
 
         #expect(first)
         #expect(!second)
@@ -80,13 +80,13 @@ struct HotKeyPressTrackerTests {
         var tracker = HotKeyPressTracker()
 
         _ = tracker.press(.toggleRecording)
-        _ = tracker.press(.editSelection)
+        _ = tracker.press(.cancelRecording)
 
-        let stranded = tracker.drainStranded(keeping: [.editSelection])
+        let stranded = tracker.drainStranded(keeping: [.cancelRecording])
 
         #expect(stranded == [.toggleRecording])
         #expect(!tracker.isPressed(.toggleRecording))
-        #expect(tracker.isPressed(.editSelection))
+        #expect(tracker.isPressed(.cancelRecording))
     }
 
     @Test func stillRegisteredPressesAreLeftAlone() {
@@ -147,15 +147,15 @@ struct HotKeyPressTrackerTests {
         var tracker = HotKeyPressTracker()
 
         _ = tracker.press(.toggleRecording)
-        _ = tracker.press(.editSelection)
+        _ = tracker.press(.cancelRecording)
 
         tracker.reset()
 
         let staleToggle = tracker.release(.toggleRecording)
-        let staleEdit = tracker.release(.editSelection)
+        let staleCancel = tracker.release(.cancelRecording)
 
         #expect(!tracker.isPressed(.toggleRecording))
         #expect(!staleToggle)
-        #expect(!staleEdit)
+        #expect(!staleCancel)
     }
 }

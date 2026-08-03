@@ -11,8 +11,6 @@ final class AppState: Sendable {
     let parakeet = ParakeetProvider()
     let whisper = WhisperProvider()
     let customProvider = CustomProvider()
-    let editModeProvider = EditModeProvider()
-    let customEditProvider = CustomEditProvider()
     let recordingStore = RecordingStore()
     let analyticsStore = AnalyticsStore()
     let permissions = PermissionsManager()
@@ -27,48 +25,30 @@ final class AppState: Sendable {
         toast: toast
     )
 
+    /// Read once at launch. Changing `.env` requires a relaunch — reloading
+    /// mid-session would let a recording start under one configuration and
+    /// finish under another.
+    let envConfig = EnvConfig.load()
+    let cleanupClient = CleanupClient()
+
     var replacementSettings = ReplacementSettings.load()
     var transcriptionMode: TranscriptionMode = TranscriptionModeStorage.load()
     var customProviderSettings = CustomProviderSettings.load()
-    var customEditProviderSettings = CustomEditProviderSettings.load()
-    var editModeBehavior: EditModeBehavior = EditModeSettings.behavior
-
-    var selectionEnabled: Bool { editModeBehavior.selectionEnabled }
-    var autoCleanupEnabled: Bool { editModeBehavior.autoCleanupEnabled }
-    var voiceEditEnabled: Bool = EditModeSettings.voiceEdit
     var showMenuBarVisibilityHint = false
 
     var modelLoadState: ModelLoadState { modelLoader.state }
 
-    /// Set while a voice-edit recording is active. Holds the captured
-    /// selection + saved pasteboard so the second shortcut press can
-    /// transcribe the voice instruction and apply it to the selection.
-    /// When non-nil, the recorder is in `.recording` state but the
-    /// normal toggle/cancel handlers route to the edit-mode flow
-    /// instead of the standard transcribe-and-paste path.
-    var editModeContext: EditModeContext?
+    /// True while the live-dictation cleanup pass is running (the LLM
+    /// polish step after transcription, before paste). Used by the menu
+    /// bar icon + status text to render "Editing…" instead of the
+    /// generic "Transcribing…" treatment.
+    var isCleanupProcessing = false
 
-    /// True when the active recording was started via the Auto-Cleanup
-    /// shortcut. Read at transcription time to decide whether to run
-    /// the LLM cleanup pass; reset on stop, cancel, and error.
-    var cleanupRequestedForCurrentRecording: Bool = false
-
-    /// True while the edit-mode flow is in its post-recording phase
-    /// (transcribing the instruction + invoking the edit provider). Used
-    /// by the menu bar icon + status text to render edit-specific state
-    /// instead of the generic "Transcribing…" treatment.
-    var isEditModeProcessing = false
-
-    /// Character count of the current edit-mode selection. Used by the
-    /// menu bar status text to surface scale for larger edits — only
-    /// shown when above `EditModeProvider.softCharThreshold`.
-    var editModeProcessingCharCount: Int = 0
-
-    struct EditModeContext: Sendable {
-        let selectedText: String
-        let savedPasteboard: PasteboardService.SavedPasteboardContents?
-        let recordingId: String
-    }
+    /// Character count of the text currently being run through cleanup.
+    /// Used by the menu bar status text to surface scale for larger
+    /// passes — only shown above a threshold (see
+    /// `RecordingHeaderView.cleanupCharThreshold` in `MenuBarView`).
+    var cleanupProcessingCharCount: Int = 0
 
     let maxRecordingDuration: TimeInterval = 600.0  // 10 minutes
     var warningDuration: TimeInterval { maxRecordingDuration * 0.8 }  // 8 minutes
@@ -91,12 +71,8 @@ final class AppState: Sendable {
             onRecordingEnded?()
             currentRecordingId = nil
             captureTransitionInFlight = false
-            cleanupRequestedForCurrentRecording = false
-            if editModeContext == nil, let recordingId {
+            if let recordingId {
                 saveInterruptedRecording(interruption, recordingId: recordingId)
-            } else if let context = editModeContext {
-                editModeContext = nil
-                pasteboard.restoreSavedPasteboard(context.savedPasteboard)
             }
             toast.showError(title: "Recording Failed", message: interruption.message)
             recorder.reset()
@@ -171,7 +147,28 @@ final class AppState: Sendable {
     /// recorder state would drop the release entirely and leave the microphone
     /// running with nothing left to stop it. Recording the *intent* instead
     /// makes the decision independent of how long the hardware took.
-    private var pendingHoldRelease: HoldToTalkPolicy.Release?
+    private var pendingHoldRelease: (decision: HoldToTalkPolicy.Release, generation: UInt64)?
+
+    /// Incremented on every hold-to-talk press, and stamped onto any release
+    /// parked against that press.
+    ///
+    /// Defence in depth, and honestly labelled as such: **on the hotkey path this
+    /// check cannot currently fail.** `beginHoldToTalk` clears
+    /// `pendingHoldRelease` three lines before it bumps this counter, with no
+    /// suspension point between, so a parked release always carries the current
+    /// generation. What actually keeps a stale release from cutting short someone
+    /// else's recording is that clear, plus `endHoldToTalkStartWindow()`.
+    ///
+    /// It is kept because it is cheap and it states the invariant those two rely
+    /// on. It is not, however, a general guard: a start that does not run through
+    /// `beginHoldToTalk` neither clears the parked release nor bumps this counter,
+    /// so a stale release *matches* and gets applied. `toggleRecording()` is that
+    /// path — see the precondition on it. Unreachable today only because nothing
+    /// calls it.
+    ///
+    /// Wrapping addition: a counter that trapped on overflow would crash the
+    /// hotkey path, and only equality is ever compared.
+    private var holdGeneration: UInt64 = 0
 
     /// Whether a hold-to-talk start *this object initiated* is still resolving.
     ///
@@ -185,16 +182,25 @@ final class AppState: Sendable {
     /// Kept for the menu bar and any UI affordance that starts a recording
     /// without a key to hold. The hotkey path is `beginHoldToTalk` /
     /// `endHoldToTalk` and no longer routes through here.
+    ///
+    /// **Precondition:** `pendingHoldRelease` must be cleared before starting.
+    /// Unlike `beginHoldToTalk`, this path neither clears a parked release nor
+    /// bumps `holdGeneration`, so a release parked by an earlier hold still
+    /// matches the current generation and `applyPendingHoldRelease` would apply
+    /// it — stopping or discarding the recording this call just began. The
+    /// generation check does not catch it; see `holdGeneration`.
+    ///
+    /// `pendingHoldRelease` is `private`, so only code in this file can satisfy
+    /// that: a caller elsewhere cannot make itself safe, and the clear has to be
+    /// added here when this method acquires one.
+    ///
+    /// Currently uncalled, which is the only reason that is theoretical. Retained
+    /// for the strip phase to decide; do not give it a caller without resolving
+    /// this first.
     func toggleRecording() {
-        // Edit-mode recording uses the same recorder. Don't let the normal
-        // toggle shortcut hijack it — the user has to press the edit
-        // shortcut again (or Esc) to end an edit recording.
-        if editModeContext != nil { return }
-
         if recorder.state.isRecording {
             stopAndTranscribe()
         } else {
-            cleanupRequestedForCurrentRecording = false
             startRecording()
         }
     }
@@ -202,17 +208,12 @@ final class AppState: Sendable {
     /// Hotkey pressed. Starts recording immediately — latency here is felt
     /// directly as clipped first syllables.
     func beginHoldToTalk() {
-        if editModeContext != nil { return }
-
-        // A start already in flight — from the auto-cleanup shortcut, or from
-        // `toggleRecording()` if a UI affordance ever calls it again — owns both
-        // the recording and its cleanup intent. Bail before
-        // touching either. Checking `captureTransitionInFlight` as well as
+        // A start already in flight — from `toggleRecording()` if a UI
+        // affordance ever calls it again — owns the recording. Bail before
+        // touching it. Checking `captureTransitionInFlight` as well as
         // `isRecording` matters because the gap between them is exactly the
         // CoreAudio device-open window: during it a recording is being started
-        // but does not yet report itself as recording, and clearing
-        // `cleanupRequestedForCurrentRecording` there would silently disable the
-        // cleanup pass on someone else's recording.
+        // but does not yet report itself as recording.
         guard !recorder.state.isRecording, !captureTransitionInFlight else { return }
 
         // Below the guard, deliberately. A press that bails above must not
@@ -223,8 +224,8 @@ final class AppState: Sendable {
         pendingHoldRelease = nil
 
         holdToTalkStartedAt = ProcessInfo.processInfo.systemUptime
+        holdGeneration &+= 1
         holdToTalkStartInFlight = true
-        cleanupRequestedForCurrentRecording = false
         startRecording()
     }
 
@@ -245,10 +246,8 @@ final class AppState: Sendable {
         let startedAt = holdToTalkStartedAt
         holdToTalkStartedAt = nil
 
-        if editModeContext != nil { return }
-
         let held = startedAt.map { ProcessInfo.processInfo.systemUptime - $0 }
-        let decision = HoldToTalkPolicy.release(heldFor: held)
+        let decision = HoldToTalkPolicy.release(heldFor: held, minimum: envConfig.minHold)
 
         if recorder.state.isRecording {
             applyHoldRelease(decision)
@@ -260,7 +259,7 @@ final class AppState: Sendable {
         // start — possibly one begun by a different shortcut entirely — would
         // consume the stale intent and be cut down immediately.
         guard holdToTalkStartInFlight else { return }
-        pendingHoldRelease = decision
+        pendingHoldRelease = (decision, holdGeneration)
     }
 
     /// Runs a release decision against a live recorder.
@@ -290,15 +289,13 @@ final class AppState: Sendable {
     func abortHoldToTalk() {
         holdToTalkStartedAt = nil
 
-        if editModeContext != nil { return }
-
         if recorder.state.isRecording {
             applyHoldRelease(.discard)
             return
         }
 
         guard holdToTalkStartInFlight else { return }
-        pendingHoldRelease = .discard
+        pendingHoldRelease = (.discard, holdGeneration)
     }
 
     /// Applies a release that arrived before the recorder was live, if one did.
@@ -307,8 +304,14 @@ final class AppState: Sendable {
     /// pending release was consumed.
     @discardableResult
     func applyPendingHoldRelease() -> Bool {
-        guard let decision = pendingHoldRelease else { return false }
+        guard let parked = pendingHoldRelease else { return false }
         pendingHoldRelease = nil
+        // Belongs to an earlier press whose start never completed — applying it
+        // would cut short the recording now starting.
+        guard HoldToTalkPolicy.shouldApplyParkedRelease(
+            parked: parked.generation, current: holdGeneration)
+        else { return false }
+        let decision = parked.decision
         applyHoldRelease(decision)
         return true
     }
@@ -322,31 +325,28 @@ final class AppState: Sendable {
     /// release that outlives its start has nothing to act on and must not survive
     /// to meet the next one.
     ///
-    /// One exit is *not* covered: `guard !captureTransitionInFlight` sits above
-    /// the `defer`, so a hold start bailing there leaves the window open and its
-    /// release can be consumed by the flow already running. Reaching that needs
-    /// two starts within about one main-actor hop. Hoisting the `defer` would not
-    /// fix it and would make things worse — a second flow bailing at that guard
-    /// would then clear a live hold's window. The real fix is a generation token
-    /// on the parked release; deferred rather than bolted on here.
+    /// `startRecordingFlow`'s `guard !captureTransitionInFlight` sits above the
+    /// `defer` and so is not covered here. A hold start *can* reach it:
+    /// `startRecording()` defers the flow into a `Task`, so two presses landing
+    /// before either flow body runs both clear `beginHoldToTalk`'s check of the
+    /// same flag, and the second flow then bails at the guard with its window
+    /// left open.
+    ///
+    /// That is safe, but not for the reason it looks: reaching that guard means a
+    /// `startRecordingFlow` is already running, and *its* `defer` clears the
+    /// window. (Only `startRecordingFlow` clears it — the stop, discard and
+    /// cancel flows set the same flag but do not. They cannot strand a window
+    /// either, since one can only open while the flag is clear, so any of them
+    /// is necessarily enqueued behind the start flow that opened it.) The
+    /// second press's release is applied to the first press's recording — correct
+    /// either way, since the user did release the key.
+    ///
+    /// Hoisting the `defer` above the guard was the obvious fix and the wrong
+    /// one: a second flow bailing there would then clear a live hold's window,
+    /// which is the same bug pointing the other way.
     func endHoldToTalkStartWindow() {
         holdToTalkStartInFlight = false
         pendingHoldRelease = nil
-    }
-
-    /// Auto-cleanup recording shortcut: starts/stops a normal recording
-    /// but flags it so the LLM cleanup pass runs on the transcript
-    /// before insertion. Pressing this while another recording is in
-    /// flight just stops it — the cleanup intent is fixed at start time.
-    func toggleAutoCleanupRecording() {
-        if editModeContext != nil { return }
-
-        if recorder.state.isRecording {
-            stopAndTranscribe()
-        } else {
-            cleanupRequestedForCurrentRecording = true
-            startRecording()
-        }
     }
 
     func startRecording() {
@@ -358,12 +358,6 @@ final class AppState: Sendable {
     }
 
     func cancelRecording() {
-        // Esc cancels whichever flow is active. Edit-mode cancel restores
-        // the saved pasteboard and bails without transcribing.
-        if editModeContext != nil {
-            cancelEditModeRecording()
-            return
-        }
         Task { await cancelRecordingFlow() }
     }
 
@@ -412,14 +406,6 @@ final class AppState: Sendable {
 
     func reloadShortcuts() {
         CustomShortcutMonitor.shared.reloadShortcuts()
-    }
-
-    /// Which shortcuts are registered depends on which features are switched
-    /// on, so a settings change has to re-derive them. A shortcut for a
-    /// disabled feature must end up unregistered — that is what lets the chord
-    /// reach the focused app instead of being swallowed.
-    func refreshShortcutRegistrations() {
-        CustomShortcutMonitor.shared.refresh()
     }
 
 }
