@@ -25,7 +25,6 @@ extension AppState {
             return (rawText, nil)
         }
 
-        let model = EditModeSettings.model
         let start = Date()
 
         // Surface the LLM phase as "Editing…" in the menu bar so the icon
@@ -39,40 +38,29 @@ extension AppState {
         }
 
         do {
-            let cleaned: String
-            switch model {
-            case .custom:
-                // Skip the call entirely if the user never wired up the
-                // endpoint — without config we'd just throw and fall
-                // back, which silently drops the user's cleanup intent.
-                guard customEditProviderSettings.isConfigured else {
-                    return (rawText, nil)
-                }
-                cleaned = try await customEditProvider.cleanupTranscript(
-                    rawText, settings: customEditProviderSettings)
-            case .gpt5Mini, .claudeHaiku45:
-                cleaned = try await editModeProvider.cleanupTranscript(
-                    rawText, model: model)
-            }
+            let cleaned = try await cleanupClient.cleanup(
+                transcript: rawText, config: envConfig)
             let duration = Date().timeIntervalSince(start)
             let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return (rawText, nil) }
 
-            let backendModel: String = model == .custom
-                ? customEditProviderSettings.modelName
-                : model.rawValue
             let cleanup = RecordingCleanup(
                 rawText: rawText,
                 cleanedText: trimmed,
-                backendModel: backendModel,
+                backendModel: envConfig.llmModel ?? "unknown",
                 cleanupDuration: duration
             )
             return (trimmed, cleanup)
         } catch {
-            // Silent UX is intentional — fall back to the raw transcript so
-            // the user isn't blocked. Log so device logs still capture the
-            // failure for debugging.
-            log.error("Auto-cleanup failed (\(model.rawValue, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+            // Silent UX is intentional — fall back to the raw transcript so the
+            // user isn't blocked. Now that cleanup runs on every dictation, this
+            // is what stops a model outage or an expired key from costing the
+            // user their words. Logged so device logs still capture it.
+            //
+            // The error is never surfaced in the UI and never carries the key:
+            // CleanupClient's serverError holds only the response body.
+            log.error(
+                "Cleanup failed: \(error.localizedDescription, privacy: .public)")
             return (rawText, nil)
         }
     }

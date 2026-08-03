@@ -27,6 +27,12 @@ final class AppState: Sendable {
         toast: toast
     )
 
+    /// Read once at launch. Changing `.env` requires a relaunch — reloading
+    /// mid-session would let a recording start under one configuration and
+    /// finish under another.
+    let envConfig = EnvConfig.load()
+    let cleanupClient = CleanupClient()
+
     var replacementSettings = ReplacementSettings.load()
     var transcriptionMode: TranscriptionMode = TranscriptionModeStorage.load()
     var customProviderSettings = CustomProviderSettings.load()

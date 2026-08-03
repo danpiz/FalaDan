@@ -126,10 +126,12 @@ extension AppState {
         let recordingId = currentRecordingId ?? Recording.generateId()
         currentRecordingId = nil
 
-        // Snapshot + clear the cleanup flag before running transcribe.
-        // Whether the recording was started via the Auto-Cleanup shortcut
-        // is fixed at start time; stopping doesn't change the intent.
-        let applyCleanup = cleanupRequestedForCurrentRecording
+        // Cleanup now runs on every dictation rather than behind a second
+        // shortcut, so this is read from config rather than from what the user
+        // pressed. `isCleanupConfigured` is what keeps an unconfigured install
+        // working: with no key set, the call is skipped and the raw transcript
+        // is pasted, exactly as it was before this phase.
+        let applyCleanup = envConfig.isCleanupConfigured
         cleanupRequestedForCurrentRecording = false
 
         await transcribe(
