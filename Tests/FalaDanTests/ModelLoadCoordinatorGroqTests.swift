@@ -15,10 +15,13 @@ import Testing
 /// all. This test exists so that undoing the guard fails loudly.
 @MainActor
 struct ModelLoadCoordinatorGroqTests {
-    private func coordinator(remoteSettings: CustomProviderSettings) -> ModelLoadCoordinator {
+    private func coordinator(
+        initialMode: TranscriptionMode = .default,
+        remoteSettings: CustomProviderSettings = .empty
+    ) -> ModelLoadCoordinator {
         ModelLoadCoordinator(
-            initialMode: .default,
-            remoteSettings: .empty,
+            initialMode: initialMode,
+            remoteSettings: remoteSettings,
             parakeet: ParakeetProvider(),
             whisper: WhisperProvider(),
             toast: .shared
@@ -35,7 +38,7 @@ struct ModelLoadCoordinatorGroqTests {
 
     /// Selecting Groq must settle immediately — there is nothing to download.
     @Test func selectingGroqNeverStrandsTheLoadingState() {
-        let loader = coordinator(remoteSettings: .empty)
+        let loader = coordinator()
 
         loader.loadSelectedModel(mode: .groq, remoteSettings: configured)
         #expect(loader.state == .ready, "configured Groq should be ready, not loading")
@@ -48,12 +51,21 @@ struct ModelLoadCoordinatorGroqTests {
     /// narrows it back to one clause, one of these two tests fails whichever
     /// mode they leave out.
     @Test func selectingCustomNeverStrandsTheLoadingState() {
-        let loader = coordinator(remoteSettings: .empty)
+        let loader = coordinator()
 
         loader.loadSelectedModel(mode: .custom, remoteSettings: configured)
         #expect(loader.state == .ready)
 
         loader.loadSelectedModel(mode: .custom, remoteSettings: .empty)
         #expect(loader.state == .idle)
+    }
+
+    /// Launching *already* in a remote mode goes through the initialiser, not
+    /// `loadSelectedModel` — a separate path to the same state, and the one a
+    /// user whose stored mode is Groq actually takes.
+    @Test func launchingIntoARemoteModeIsReadyWithoutLoading() {
+        #expect(coordinator(initialMode: .groq, remoteSettings: configured).state == .ready)
+        #expect(coordinator(initialMode: .groq, remoteSettings: .empty).state == .idle)
+        #expect(coordinator(initialMode: .custom, remoteSettings: configured).state == .ready)
     }
 }

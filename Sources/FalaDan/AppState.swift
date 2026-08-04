@@ -151,9 +151,27 @@ final class AppState: Sendable {
     /// Groq and Custom are the same request to `CustomProvider`; they differ
     /// only in where the configuration comes from. The local models need none.
     func remoteTranscriptionSettings(for mode: TranscriptionMode) -> CustomProviderSettings {
+        Self.remoteTranscriptionSettings(
+            for: mode, envConfig: envConfig, customSettings: customProviderSettings)
+    }
+
+    /// The mapping itself, pulled out of the instance so it can be tested.
+    ///
+    /// This decides where a recording is uploaded, which makes it the most
+    /// consequential line in the transcription path: swap the two arms and
+    /// `.groq` audio goes to the user's private Custom endpoint while `.custom`
+    /// audio goes to Groq under `STT_API_KEY`. Both requests would succeed and
+    /// return a transcript, so nothing would surface — no toast, no log, no
+    /// failed test. A review swapped them and all 251 tests still passed, which
+    /// is why the mapping now lives here with assertions on it.
+    static func remoteTranscriptionSettings(
+        for mode: TranscriptionMode,
+        envConfig: EnvConfig,
+        customSettings: CustomProviderSettings
+    ) -> CustomProviderSettings {
         switch mode {
         case .groq: return envConfig.sttProviderSettings
-        case .custom: return customProviderSettings
+        case .custom: return customSettings
         case .default, .multilingual: return .empty
         }
     }

@@ -55,7 +55,8 @@ No recording and no transcript, by default. Three things change that, and all ar
 - **LLM cleanup**, if you configure it in `.env`, sends the transcript *text* — never the
   audio — to the provider you named.
 - **Groq transcription**, if you configure `STT_*` in `.env` and select it in the model picker,
-  uploads the **audio** to Groq. The two local models never do.
+  uploads the **audio** to whatever `STT_BASE_URL` names — Groq by default, but it accepts any
+  OpenAI-compatible endpoint. The Default and Multilingual models never upload anything.
 - **Custom transcription mode**, if you select it in the model picker, uploads the **audio
   itself** to the endpoint you configured. The default and multilingual models are local.
 
@@ -105,7 +106,7 @@ no cleanup call — see [What leaves your machine](#what-leaves-your-machine).
 | `LLM_CLEANUP` | *(on)* | Set to `off` to skip cleanup and always paste the raw transcript |
 | `STT_API_KEY` | *(unset)* | The Groq row in the model picker is hidden entirely unless both this and `STT_MODEL` are set |
 | `STT_MODEL` | *(unset)* | Groq model id, e.g. `whisper-large-v3-turbo` |
-| `STT_BASE_URL` | `https://api.groq.com/openai/v1` | Groq's OpenAI-compatible transcription endpoint |
+| `STT_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible transcription endpoint. The row is labelled "Groq" whatever you point it at |
 | `MIN_HOLD_MS` | `150` | Holds shorter than this are treated as an accidental tap and discarded; `0` disables the guard |
 | `MIN_TRANSCRIBE_MS` | `300` | Recordings shorter than this are discarded — Whisper hallucinates filler on very short clips |
 
