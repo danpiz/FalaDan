@@ -42,6 +42,8 @@ ad-hoc signing on every `just dev` — see [Troubleshooting](#troubleshooting).
 - **Multiple models** — switch between the default fast model (Parakeet: English + 20 European
   languages), multilingual auto-detect (whisper.cpp), and a custom OpenAI-compatible
   transcription endpoint
+- **Recording indicator** — a pill at the bottom of the screen while FalaDan is listening,
+  shown only once a hold is long enough to count as dictation
 - **Optional LLM cleanup** — removes fillers, fixes homophones and punctuation, and applies
   spoken corrections like "scratch that", on every dictation
 - **On-device transcription** — with Parakeet or whisper.cpp, audio never leaves your Mac
