@@ -15,7 +15,6 @@ let package = Package(
             url: "https://github.com/FluidInference/FluidAudio.git",
             .upToNextMinor(from: "0.12.6")
         ),
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.1"),
     ],
     targets: [
         .executableTarget(
@@ -23,13 +22,11 @@ let package = Package(
             dependencies: [
                 "FluidAudio",
                 "whisper",
-                .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources/FalaDan",
             exclude: ["Resources"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
-                .define("ENABLE_SPARKLE"),
             ]
         ),
         .binaryTarget(

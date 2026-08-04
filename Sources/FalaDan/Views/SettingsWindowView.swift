@@ -87,9 +87,9 @@ final class FalaDanSettingsWindowController: NSWindowController, NSToolbarDelega
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func open(appState: AppState, updaterController: UpdaterProviding?) {
+    func open(appState: AppState) {
         if window == nil {
-            configureWindow(appState: appState, updaterController: updaterController)
+            configureWindow(appState: appState)
         }
 
         resizeWindow(for: nav.selectedTab, animate: false)
@@ -98,10 +98,9 @@ final class FalaDanSettingsWindowController: NSWindowController, NSToolbarDelega
         window?.makeKeyAndOrderFront(nil)
     }
 
-    private func configureWindow(appState: AppState, updaterController: UpdaterProviding?) {
+    private func configureWindow(appState: AppState) {
         let rootView = FalaDanSettingsView()
             .environment(appState)
-            .environment(\.updaterController, updaterController)
         let host = NSHostingController(rootView: rootView)
         let window = NSWindow(contentViewController: host)
         window.title = "FalaDan Settings"
@@ -180,9 +179,7 @@ final class FalaDanSettingsWindowController: NSWindowController, NSToolbarDelega
 
 private struct GeneralSettingsPage: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.updaterController) private var updaterController
     @StateObject private var launchManager = LaunchAtLoginManager.shared
-    @State private var autoUpdateEnabled = true
     @State private var vadEnabled = VADSettings.enabled
 
     var body: some View {
@@ -197,21 +194,6 @@ private struct GeneralSettingsPage: View {
                         set: { launchManager.isEnabled = $0 }
                     )
                 )
-
-                Toggle(
-                    "Check for updates automatically",
-                    isOn: Binding(
-                        get: { autoUpdateEnabled },
-                        set: {
-                            autoUpdateEnabled = $0
-                            updaterController?.automaticallyChecksForUpdates = $0
-                        }
-                    )
-                )
-
-                LabeledContent("Check for updates") {
-                    updateCheckContent
-                }
             }
 
             Section("Transcription") {
@@ -245,76 +227,8 @@ private struct GeneralSettingsPage: View {
         }
         .onAppear {
             launchManager.refresh()
-            autoUpdateEnabled = updaterController?.automaticallyChecksForUpdates ?? true
             vadEnabled = VADSettings.enabled
         }
-    }
-
-    /// Mirrors the live update state next to the Check Now button, since the
-    /// menu popover (where the full banner lives) is closed while the user
-    /// is in this window.
-    @ViewBuilder private var updateCheckContent: some View {
-        switch updaterController?.updateViewModel.state ?? .idle {
-        case .idle:
-            checkNowButton
-
-        case .checking:
-            HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Checking…")
-                    .foregroundStyle(.secondary)
-            }
-
-        case .updateAvailable(let update):
-            Button("Install \(update.version)") {
-                update.install()
-            }
-
-        case .downloading(let download):
-            Text(
-                download.fraction.map { "Downloading… \(Int($0 * 100))%" }
-                    ?? "Downloading…"
-            )
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-
-        case .extracting:
-            Text("Preparing…")
-                .foregroundStyle(.secondary)
-
-        case .installing:
-            Text("Installing… FalaDan will relaunch")
-                .foregroundStyle(.secondary)
-
-        case .notFound:
-            Text("You're up to date")
-                .foregroundStyle(.secondary)
-
-        case .failed:
-            HStack(spacing: 8) {
-                Text("Update failed")
-                    .foregroundStyle(.secondary)
-                checkNowButton
-            }
-        }
-    }
-
-    private var checkNowButton: some View {
-        Button("Check Now") {
-            guard updaterController?.updateViewModel.state.allowsManualCheck == true else {
-                return
-            }
-            updaterController?.checkForUpdates(nil)
-        }
-        .disabled(updateCheckDisabled)
-    }
-
-    private var updateCheckDisabled: Bool {
-        guard let updaterController, updaterController.isAvailable else {
-            return true
-        }
-        return !updaterController.updateViewModel.state.allowsManualCheck
     }
 }
 

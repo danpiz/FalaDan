@@ -17,7 +17,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var terminationReplyHandlers: [() -> Void] = []
     private var processingAnimationTimer: Timer?
     private var processingAnimationPhase: Double = 0
-    let updaterController: UpdaterProviding = makeUpdaterController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -90,7 +89,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentViewController = VibrancyHostingController(
             rootView: MenuBarView()
                 .environment(appState)
-                .environment(\.updaterController, updaterController)
         )
     }
 
@@ -230,10 +228,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Model preload and hotkey registration must run before any await
         // that can block on a permission prompt (mic, notifications below).
-        // Those prompts suspend until the user answers — and for an
-        // LSUIElement app relaunched by Sparkle after an update, the
-        // notification prompt may never even render, hanging the await
-        // forever. With the prompts ordered first, the app sat at
+        // Those prompts suspend until the user answers, which can hang the
+        // await for a while. With the prompts ordered first, the app sat at
         // "Loading Model..." with no event tap installed, so shortcuts
         // fell through to the frontmost app.
         appState.preloadModel()
@@ -357,19 +353,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - User Notifications
 
 extension AppDelegate: UNUserNotificationCenterDelegate {
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        let identifier = response.notification.request.identifier
-        guard identifier == UpdateNotification.identifier else { return }
-        // The update session is still pending in the updater's view model;
-        // opening the popover surfaces the banner with its Install action.
-        await MainActor.run {
-            self.revealMenuBarInterface()
-        }
-    }
-
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
