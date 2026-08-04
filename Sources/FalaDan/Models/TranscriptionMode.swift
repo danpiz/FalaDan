@@ -10,6 +10,19 @@ enum TranscriptionMode: String, Codable, Sendable {
     case custom
     case groq
 
+    /// Whether the underlying model is Whisper.
+    ///
+    /// Matters because Whisper hallucinates on silence and Parakeet does not —
+    /// see `TranscriptSubstance`. `.custom` counts: it posts to an
+    /// OpenAI-compatible `/v1/audio/transcriptions`, which in practice is
+    /// Whisper or something trained to imitate it.
+    var usesWhisperFamilyModel: Bool {
+        switch self {
+        case .default: return false
+        case .multilingual, .custom, .groq: return true
+        }
+    }
+
     var modelDisplayName: String {
         switch self {
         case .default: return "Parakeet"

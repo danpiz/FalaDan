@@ -44,6 +44,7 @@ enum CleanupPromptStore {
         Constraints:
         - Don't paraphrase, summarize, or add content. Don't drop content either — every clause the speaker said should appear in the output, just cleaner.
         - If the transcript is already clean, return it unchanged.
+        - If the transcript is empty, a fragment, or has nothing worth changing, return it exactly as given. Never explain, apologize, or comment on the input — output like "There is no text to clean" gets pasted at the user's cursor as if they had said it.
 
         Output the cleaned text only:
         - No surrounding quotes.

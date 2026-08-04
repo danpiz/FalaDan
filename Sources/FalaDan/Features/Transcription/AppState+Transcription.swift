@@ -24,7 +24,11 @@ extension AppState {
     func applyAutoCleanup(
         rawText: String, applyCleanup: Bool
     ) async -> (text: String, cleanup: RecordingCleanup?) {
-        guard applyCleanup, !rawText.isEmpty else {
+        // `isWorthCleaning`, not `!isEmpty`: given a one-word transcript the
+        // model replies *about* it — "There is no text to clean" — and that
+        // reply gets pasted as though it were the dictation. Detecting such a
+        // reply would be another unwinnable shape guess; not asking is the fix.
+        guard applyCleanup, TranscriptSubstance.isWorthCleaning(rawText) else {
             return (rawText, nil)
         }
 
@@ -193,7 +197,11 @@ extension AppState {
             // Applying this result would desync state from the active recording.
             guard recorder.state == .processing else { return }
 
-            guard !result.text.isEmpty else {
+            // Not merely `!isEmpty`: Whisper answers silence with "Thank you."
+            // or "you" rather than nothing, so an accidental hold would paste an
+            // artifact. Parakeet returns empty and is unaffected — see
+            // `TranscriptSubstance`.
+            guard TranscriptSubstance.hasSpeech(result.text, mode: transcriptionMode) else {
                 recorder.reset()
                 toast.showError(
                     title: "Empty Transcription", message: "No speech detected in recording.")
@@ -325,7 +333,11 @@ extension AppState {
 
             guard recorder.state == .processing else { return }
 
-            guard !result.text.isEmpty else {
+            // Not merely `!isEmpty`: Whisper answers silence with "Thank you."
+            // or "you" rather than nothing, so an accidental hold would paste an
+            // artifact. Parakeet returns empty and is unaffected — see
+            // `TranscriptSubstance`.
+            guard TranscriptSubstance.hasSpeech(result.text, mode: transcriptionMode) else {
                 recorder.reset()
                 toast.showError(
                     title: "Empty Transcription", message: "No speech detected in recording.")
@@ -445,7 +457,11 @@ extension AppState {
 
             guard recorder.state == .processing else { return }
 
-            guard !result.text.isEmpty else {
+            // Not merely `!isEmpty`: Whisper answers silence with "Thank you."
+            // or "you" rather than nothing, so an accidental hold would paste an
+            // artifact. Parakeet returns empty and is unaffected — see
+            // `TranscriptSubstance`.
+            guard TranscriptSubstance.hasSpeech(result.text, mode: transcriptionMode) else {
                 recorder.reset()
                 toast.showError(
                     title: "Empty Transcription", message: "No speech detected in recording.")
