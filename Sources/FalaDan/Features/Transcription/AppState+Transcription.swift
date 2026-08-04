@@ -182,7 +182,7 @@ extension AppState {
                 result = try await parakeet.transcribe(audioURL: uploadURL)
             case .multilingual:
                 result = try await whisper.transcribe(audioURL: uploadURL)
-            case .custom:
+            case .custom, .groq:
                 result = try await customProvider.transcribe(
                     audioURL: uploadURL, settings: customProviderSettings)
             }
@@ -316,7 +316,7 @@ extension AppState {
                 result = try await parakeet.transcribe(audioURL: uploadURL)
             case .multilingual:
                 result = try await whisper.transcribe(audioURL: uploadURL)
-            case .custom:
+            case .custom, .groq:
                 result = try await customProvider.transcribe(
                     audioURL: uploadURL, settings: customProviderSettings)
             }
@@ -435,7 +435,7 @@ extension AppState {
                 result = try await parakeet.transcribe(audioURL: uploadURL)
             case .multilingual:
                 result = try await whisper.transcribe(audioURL: uploadURL)
-            case .custom:
+            case .custom, .groq:
                 result = try await customProvider.transcribe(
                     audioURL: uploadURL, settings: customProviderSettings)
             }

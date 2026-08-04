@@ -44,7 +44,7 @@ final class ModelLoadCoordinator: Sendable {
                     try await self.parakeet.initialize(progressHandler: progressHandler)
                 case .multilingual:
                     try await self.whisper.initialize(progressHandler: progressHandler)
-                case .custom:
+                case .custom, .groq:
                     return
                 }
 
@@ -69,7 +69,7 @@ final class ModelLoadCoordinator: Sendable {
             parakeet.unload()
         case .multilingual:
             whisper.unload()
-        case .custom:
+        case .custom, .groq:
             break
         }
     }
@@ -97,7 +97,7 @@ final class ModelLoadCoordinator: Sendable {
         switch mode {
         case .default, .multilingual:
             return .idle
-        case .custom:
+        case .custom, .groq:
             return customSettings.isConfigured ? .ready : .idle
         }
     }

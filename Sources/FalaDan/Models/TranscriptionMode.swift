@@ -8,12 +8,14 @@ enum TranscriptionMode: String, Codable, Sendable {
     case `default` = "english"
     case multilingual
     case custom
+    case groq
 
     var modelDisplayName: String {
         switch self {
         case .default: return "Parakeet"
         case .multilingual: return "Whisper"
         case .custom: return "Custom"
+        case .groq: return "Groq"
         }
     }
 }

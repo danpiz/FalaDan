@@ -738,7 +738,7 @@ private struct FooterBarView: View {
         switch appState.transcriptionMode {
         case .default: return "waveform"
         case .multilingual: return "globe"
-        case .custom: return "server.rack"
+        case .custom, .groq: return "server.rack"
         }
     }
 
