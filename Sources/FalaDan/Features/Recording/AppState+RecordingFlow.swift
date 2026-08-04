@@ -23,6 +23,10 @@ extension AppState {
                 toast.showError(
                     title: "Not Configured",
                     message: "Configure your custom endpoint before recording.")
+            } else if transcriptionMode == .groq {
+                toast.showError(
+                    title: "Not Configured",
+                    message: "Set STT_API_KEY and STT_MODEL in .env before recording.")
             } else if let message = modelLoadState.failureMessage {
                 toast.showError(title: "Model Load Failed", message: message)
             } else {

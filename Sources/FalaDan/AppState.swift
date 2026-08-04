@@ -2,6 +2,9 @@ import AppKit
 import Foundation
 import Observation
 import UserNotifications
+import os.log
+
+private let log = Logger(subsystem: Logger.subsystem, category: "AppState")
 
 @Observable
 @MainActor
@@ -19,7 +22,7 @@ final class AppState: Sendable {
 
     @ObservationIgnored private lazy var modelLoader = ModelLoadCoordinator(
         initialMode: transcriptionMode,
-        customSettings: customProviderSettings,
+        remoteSettings: remoteTranscriptionSettings(for: transcriptionMode),
         parakeet: parakeet,
         whisper: whisper,
         toast: toast
@@ -32,7 +35,7 @@ final class AppState: Sendable {
     let cleanupClient = CleanupClient()
 
     var replacementSettings = ReplacementSettings.load()
-    var transcriptionMode: TranscriptionMode = TranscriptionModeStorage.load()
+    var transcriptionMode: TranscriptionMode
     var customProviderSettings = CustomProviderSettings.load()
     var showMenuBarVisibilityHint = false
 
@@ -64,6 +67,17 @@ final class AppState: Sendable {
     var isModelLoaded: Bool { modelLoadState.isReady }
 
     init() {
+        let storedMode = TranscriptionModeStorage.load()
+        let resolvedMode = TranscriptionMode.resolvingStoredMode(
+            storedMode, isGroqConfigured: envConfig.isGroqTranscriptionConfigured)
+        if resolvedMode != storedMode {
+            log.notice(
+                "Stored transcription mode \(storedMode.rawValue, privacy: .public) is not configured; falling back to \(resolvedMode.rawValue, privacy: .public)"
+            )
+            TranscriptionModeStorage.save(resolvedMode)
+        }
+        transcriptionMode = resolvedMode
+
         recorder.onRecordingInterrupted = { [weak self] interruption in
             guard let self else { return }
             let recordingId = currentRecordingId
@@ -100,7 +114,7 @@ final class AppState: Sendable {
     func preloadModel() {
         modelLoader.loadSelectedModel(
             mode: transcriptionMode,
-            customSettings: customProviderSettings
+            remoteSettings: remoteTranscriptionSettings(for: transcriptionMode)
         )
     }
 
@@ -123,13 +137,25 @@ final class AppState: Sendable {
         TranscriptionModeStorage.save(mode)
         modelLoader.loadSelectedModel(
             mode: transcriptionMode,
-            customSettings: customProviderSettings
+            remoteSettings: remoteTranscriptionSettings(for: transcriptionMode)
         )
     }
 
     func refreshCustomTranscriptionReadiness() {
         guard transcriptionMode == .custom else { return }
-        modelLoader.refreshCustomReadiness(customSettings: customProviderSettings)
+        modelLoader.refreshCustomReadiness(remoteSettings: remoteTranscriptionSettings(for: .custom))
+    }
+
+    /// Settings for whichever remote transcription endpoint a mode names.
+    ///
+    /// Groq and Custom are the same request to `CustomProvider`; they differ
+    /// only in where the configuration comes from. The local models need none.
+    func remoteTranscriptionSettings(for mode: TranscriptionMode) -> CustomProviderSettings {
+        switch mode {
+        case .groq: return envConfig.sttProviderSettings
+        case .custom: return customProviderSettings
+        case .default, .multilingual: return .empty
+        }
     }
 
     // MARK: - Recording

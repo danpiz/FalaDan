@@ -18,6 +18,19 @@ enum TranscriptionMode: String, Codable, Sendable {
         case .groq: return "Groq"
         }
     }
+
+    /// The mode to actually use, given what was stored and what `.env` provides.
+    ///
+    /// Groq's row is hidden when unconfigured, which strands anyone who selected
+    /// it and then removed the key: the stored mode is `.groq`, the row is gone,
+    /// and there is nothing to click. Falling back to the local default is the
+    /// only outcome that leaves a working app.
+    static func resolvingStoredMode(
+        _ stored: TranscriptionMode, isGroqConfigured: Bool
+    ) -> TranscriptionMode {
+        guard stored == .groq, !isGroqConfigured else { return stored }
+        return .default
+    }
 }
 
 struct TranscriptionModeStorage: Sendable {

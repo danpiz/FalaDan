@@ -13,7 +13,7 @@ final class ModelLoadCoordinator: Sendable {
 
     init(
         initialMode: TranscriptionMode,
-        customSettings: CustomProviderSettings,
+        remoteSettings: CustomProviderSettings,
         parakeet: ParakeetProvider,
         whisper: WhisperProvider,
         toast: ToastWindowController
@@ -21,15 +21,15 @@ final class ModelLoadCoordinator: Sendable {
         self.parakeet = parakeet
         self.whisper = whisper
         self.toast = toast
-        self.state = Self.initialState(for: initialMode, customSettings: customSettings)
+        self.state = Self.initialState(for: initialMode, remoteSettings: remoteSettings)
     }
 
-    func loadSelectedModel(mode: TranscriptionMode, customSettings: CustomProviderSettings) {
+    func loadSelectedModel(mode: TranscriptionMode, remoteSettings: CustomProviderSettings) {
         generation += 1
         let loadGeneration = generation
 
-        guard mode != .custom else {
-            state = Self.initialState(for: mode, customSettings: customSettings)
+        guard mode != .custom, mode != .groq else {
+            state = Self.initialState(for: mode, remoteSettings: remoteSettings)
             return
         }
 
@@ -58,9 +58,9 @@ final class ModelLoadCoordinator: Sendable {
         }
     }
 
-    func refreshCustomReadiness(customSettings: CustomProviderSettings) {
+    func refreshCustomReadiness(remoteSettings: CustomProviderSettings) {
         generation += 1
-        state = Self.initialState(for: .custom, customSettings: customSettings)
+        state = Self.initialState(for: .custom, remoteSettings: remoteSettings)
     }
 
     func unload(mode: TranscriptionMode) {
@@ -92,13 +92,13 @@ final class ModelLoadCoordinator: Sendable {
 
     private static func initialState(
         for mode: TranscriptionMode,
-        customSettings: CustomProviderSettings
+        remoteSettings: CustomProviderSettings
     ) -> ModelLoadState {
         switch mode {
         case .default, .multilingual:
             return .idle
         case .custom, .groq:
-            return customSettings.isConfigured ? .ready : .idle
+            return remoteSettings.isConfigured ? .ready : .idle
         }
     }
 }

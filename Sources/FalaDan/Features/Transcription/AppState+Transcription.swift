@@ -184,7 +184,8 @@ extension AppState {
                 result = try await whisper.transcribe(audioURL: uploadURL)
             case .custom, .groq:
                 result = try await customProvider.transcribe(
-                    audioURL: uploadURL, settings: customProviderSettings)
+                    audioURL: uploadURL,
+                    settings: remoteTranscriptionSettings(for: transcriptionMode))
             }
 
             // Guard against stale callback: if the user rapid-tapped and started a new
@@ -318,7 +319,8 @@ extension AppState {
                 result = try await whisper.transcribe(audioURL: uploadURL)
             case .custom, .groq:
                 result = try await customProvider.transcribe(
-                    audioURL: uploadURL, settings: customProviderSettings)
+                    audioURL: uploadURL,
+                    settings: remoteTranscriptionSettings(for: transcriptionMode))
             }
 
             guard recorder.state == .processing else { return }
@@ -437,7 +439,8 @@ extension AppState {
                 result = try await whisper.transcribe(audioURL: uploadURL)
             case .custom, .groq:
                 result = try await customProvider.transcribe(
-                    audioURL: uploadURL, settings: customProviderSettings)
+                    audioURL: uploadURL,
+                    settings: remoteTranscriptionSettings(for: transcriptionMode))
             }
 
             guard recorder.state == .processing else { return }
