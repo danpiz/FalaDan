@@ -24,7 +24,7 @@ dictating. "Is it recording?" is the question the app most often fails to answer
 | When it appears | **After `MIN_HOLD_MS`** | Fn is pressed constantly as a modifier. Recording starts on key-down, so an instant pill would flash on every brush — and a centred pill is far more intrusive than the menu bar glyph that already made this visible |
 | Interaction | **None; click-through** | `ignoresMouseEvents`, never key, never main. Esc already cancels. See §4.3 — this is a correctness requirement, not a simplification |
 | Content | **Static pill** | Live level metering is v2 per the design's out-of-scope list. Elapsed time is deferred — see §7 |
-| Show/hide logic | **Extracted to a pure policy type** | The panel cannot be unit-tested; the decision of whether to show can be. Mirrors `HoldToTalkPolicy` |
+| Show/hide logic | **Policy for the decision, controller for the sequencing, panel behind a protocol** | Only the drawing needs a window server. Splitting it out puts the delay-and-cancel race — the whole risk — under test rather than under manual inspection. See §4.4 |
 
 ## 4. Architecture
 
@@ -70,40 +70,24 @@ That is a permanently stuck indicator, and it is the exact failure the design's 
 verification exists to catch.
 
 **Resolution.** `hide()` must cancel the pending show, not merely order out a panel that is not
-yet on screen. A `Task` handle plus a generation stamp, and the generation is load-bearing here
-in a way it was not in `AppState`:
+yet on screen. A `Task` handle, cancelled on every end.
 
-```swift
-@MainActor
-final class RecordingIndicatorController {
-    private var panel: NSPanel?
-    private var showTask: Task<Void, Never>?
-    private var generation: UInt64 = 0
+**Cancellation alone is sufficient, and this is worth stating precisely because an earlier draft
+of this spec got it wrong.** A `Task {}` created inside a `@MainActor` method inherits main-actor
+isolation, so the scheduled work has exactly one suspension point — the sleep. Nothing can
+interleave between the cancellation check and `present()`. This spec previously claimed a
+generation counter was "load-bearing here in a way it was not in `AppState`"; a review disproved
+that across 4,000 fuzzed interleavings, and the counter has been removed rather than left to
+imply a guarantee it never provided. Do not reintroduce one here without a demonstrated
+interleaving that cancellation misses.
 
-    func recordingStarted(after delay: Duration) {
-        generation &+= 1
-        let mine = generation
-        showTask?.cancel()
-        showTask = Task { [weak self] in
-            try? await Task.sleep(for: delay)
-            guard !Task.isCancelled else { return }
-            guard let self, mine == self.generation else { return }
-            self.present()
-        }
-    }
-
-    func recordingEnded() {
-        generation &+= 1     // invalidates any in-flight show
-        showTask?.cancel()
-        showTask = nil
-        dismiss()            // safe when nothing is on screen
-    }
-}
-```
-
-Both checks are kept deliberately. Cancellation alone is *probably* sufficient on the main actor,
-but "probably" is the word that produced the Phase 1 race. The generation makes a late resumption
-unable to present regardless of how cancellation is scheduled.
+**The sequencing is testable and must be tested.** Only the *panel* needs a window server; the
+state machine does not. `RecordingIndicatorController` takes a `RecordingIndicatorPresenting` and
+an injectable sleep, so the whole race runs against a fake in-process. A first attempt at these
+tests passed against a deliberately broken implementation twice over — once because dropping the
+task handle left the orphan unobservable, and once because releasing two stacked shows together
+let `present()`'s idempotence guard hide the second. Both are recorded in the test comments.
+Verify new tests here by mutation, not by reading.
 
 `recordingEnded()` must be safe to call when nothing is showing — it is invoked on paths where
 the indicator never appeared, which is the common case for brushes.
@@ -125,22 +109,36 @@ overridden to `false` if an `NSPanel` subclass is used.
 pure UI. It does not touch `PasteboardService` or the event tap, but getting it wrong breaks the
 paste path just as thoroughly, and no test would catch it.
 
-### 4.4 Policy extraction
+### 4.4 Where the logic lives
 
-The window cannot be unit-tested; the decision can. A pure type, in the shape of
-`HoldToTalkPolicy`:
+Three layers, split by what can be tested:
 
 ```swift
+// Pure decision. Two enums, not one shared four-case Action: each function can
+// return only two of them, and a single type leaves both call sites with dead
+// switch arms that quietly do something.
 enum RecordingIndicatorPolicy {
-    enum Action: Equatable { case scheduleShow(Duration), cancelAndHide, ignore }
+    enum StartAction: Equatable { case scheduleShow(TimeInterval), showImmediately }
+    enum EndAction: Equatable { case cancelAndHide, ignore }
 
-    static func onRecordingStarted(minimumHold: TimeInterval) -> Action
-    static func onRecordingEnded(isShowing: Bool, isPending: Bool) -> Action
+    static func onRecordingStarted(minimumHold: TimeInterval) -> StartAction
+    static func onRecordingEnded(isShowing: Bool, isPending: Bool) -> EndAction
 }
-```
 
-This is where the §4.2 race is actually tested — a started-then-ended sequence inside the delay
-window must produce `cancelAndHide`, and no state in which a show survives it.
+// Sequencing. Testable: takes a presenter and an injectable sleep.
+@MainActor protocol RecordingIndicatorPresenting: AnyObject {
+    func present()
+    func dismiss()
+}
+
+@MainActor final class RecordingIndicatorController {
+    init(presenter: any RecordingIndicatorPresenting,
+         sleep: @escaping @MainActor (TimeInterval) async -> Void = ...)
+}
+
+// Drawing. Not testable, and the only part that is not.
+@MainActor final class RecordingIndicatorPanel: RecordingIndicatorPresenting
+```
 
 ### 4.5 Interaction with the interruption path
 
@@ -157,18 +155,30 @@ a line in `.env.example`.
 
 ## 5. Testing
 
-Unit-testable, via `RecordingIndicatorPolicy`:
+`RecordingIndicatorPolicy` — the decision:
 
 - Started schedules a show delayed by the configured minimum hold
-- **Ended during the delay window cancels the pending show** — the §4.2 race, and the single most
-  important test in this phase
-- Ended when nothing is showing is a no-op rather than an error
-- Started twice without an intervening end does not leave two pending shows
-- `MIN_HOLD_MS=0` yields an immediate show
+- `MIN_HOLD_MS=0` yields an immediate show; a negative does too, rather than a delay that never
+  elapses
 
-Not unit-testable, and therefore manual (§6). Per `CLAUDE.md`, the indicator appearing and
-*always* disappearing is already one of the three things no test reaches — this phase makes that
-item substantially more load-bearing.
+`RecordingIndicatorController` — the sequencing, against a fake presenter and a manual clock:
+
+- **Ended during the delay window never presents.** The §4.2 race and the most important test here
+- **Started twice cannot strand a second show.** Release the shows one at a time and end the
+  recording between them; firing both together passes against a broken implementation
+- Ended with nothing pending neither presents nor dismisses
+- Ended twice dismisses once
+- Fifty brushes in a row present nothing
+
+**Verify each of these by mutation before trusting it.** Deleting `showTask?.cancel()` must fail
+the first; deleting `cancelPendingShow()` from `scheduleShow` must fail the second; deleting
+`dismiss()`'s `isShowing` guard must fail. Two earlier drafts of these tests passed against
+implementations broken in exactly those ways.
+
+Not testable, and therefore manual (§6): everything the panel does — position, focus behaviour,
+whether it is visible over a full-screen app. Per `CLAUDE.md`, the indicator appearing and *always*
+disappearing is one of the three things no test reaches; the seam above moves most of that
+guarantee into the suite, but the drawing itself stays a manual check.
 
 ## 6. Manual verification
 

@@ -3,8 +3,9 @@ import Testing
 
 @testable import FalaDan
 
-/// The indicator's decision logic, separated from the panel so it can be tested
-/// at all. The panel itself is verified by hand — see the spec's §6.
+/// The indicator's decision logic. The sequencing it feeds — scheduling a show
+/// and calling it off — is covered by `RecordingIndicatorControllerTests`; only
+/// the panel's drawing is left to the manual pass in the spec's §6.
 struct RecordingIndicatorPolicyTests {
     @Test func anOrdinaryHoldSchedulesADelayedShow() {
         #expect(

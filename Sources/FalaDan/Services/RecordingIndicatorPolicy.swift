@@ -2,16 +2,23 @@ import Foundation
 
 /// Decides whether the recording indicator should be on screen.
 ///
-/// Separated from the panel for two reasons. The panel cannot be unit-tested —
-/// it needs a window server — and the interesting behaviour is not the drawing
-/// but the timing: a recording can end before the indicator was ever shown, and
-/// a show still waiting out its delay has to be called off rather than left to
-/// fire into an empty state.
+/// Separated from the panel because the panel needs a window server and cannot
+/// be unit-tested. This type is only the *decision*, though — the sequencing it
+/// feeds (scheduling a show, calling one off when the recording ends before it
+/// fires) lives in `RecordingIndicatorController`, which is tested through a
+/// presenter seam rather than a real panel.
 enum RecordingIndicatorPolicy {
-    enum Action: Equatable {
+    /// Two enums rather than one shared four-case `Action`: each function can
+    /// only return two of the four, so a single type left both call sites with
+    /// dead switch arms — and a dead arm that quietly does something is how a
+    /// later policy change gets silently ignored instead of failing.
+    enum StartAction: Equatable {
         /// Show after the given delay, unless cancelled first.
         case scheduleShow(TimeInterval)
         case showImmediately
+    }
+
+    enum EndAction: Equatable {
         /// Drop any pending show and take the panel down.
         case cancelAndHide
         case ignore
@@ -29,7 +36,7 @@ enum RecordingIndicatorPolicy {
     ///   `MIN_HOLD_MS`. Zero disables the hold guard and so also the delay;
     ///   negatives cannot come from the parser but are treated the same way
     ///   rather than turned into a delay that never elapses.
-    static func onRecordingStarted(minimumHold: TimeInterval) -> Action {
+    static func onRecordingStarted(minimumHold: TimeInterval) -> StartAction {
         guard minimumHold > 0 else { return .showImmediately }
         return .scheduleShow(minimumHold)
     }
@@ -40,7 +47,7 @@ enum RecordingIndicatorPolicy {
     /// - Parameters:
     ///   - isShowing: the panel is on screen.
     ///   - isPending: a delayed show is scheduled and has not fired.
-    static func onRecordingEnded(isShowing: Bool, isPending: Bool) -> Action {
+    static func onRecordingEnded(isShowing: Bool, isPending: Bool) -> EndAction {
         (isShowing || isPending) ? .cancelAndHide : .ignore
     }
 }
