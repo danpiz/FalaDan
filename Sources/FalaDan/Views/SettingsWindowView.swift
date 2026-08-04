@@ -315,10 +315,8 @@ private struct IntegrationSettingsPage: View {
         @Bindable var appState = appState
 
         Form {
-            Section("Agent Skills") {
+            Section("Replacements") {
                 Toggle("Enable replacements", isOn: $appState.replacementSettings.enabled)
-                ClaudeSkillSettingsRow()
-                    .disabled(!appState.replacementSettings.enabled)
             }
 
             Section("Files") {
@@ -342,110 +340,6 @@ private struct IntegrationSettingsPage: View {
         .padding(.horizontal, 4)
         .onChange(of: appState.replacementSettings) {
             appState.replacementSettings.save()
-        }
-    }
-}
-
-private struct ClaudeSkillSettingsRow: View {
-    @Environment(AppState.self) private var appState
-    private let manager = ClaudeSkillManager.shared
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Claude Code replacement skill")
-                Text(statusText)
-                    .font(.caption)
-                    .foregroundStyle(statusColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
-            Toggle(
-                "",
-                isOn: Binding(
-                    get: { manager.isEnabled },
-                    set: { toggle($0) }
-                )
-            )
-            .labelsHidden()
-            .disabled(!manager.claudeCodeInstalled || manager.hasConflict)
-        }
-        .onAppear { manager.refresh() }
-
-        if manager.hasConflict {
-            HStack {
-                Spacer()
-                Button("Reveal Conflict") { manager.revealConflictInFinder() }
-                    .buttonStyle(.borderless)
-            }
-        } else if manager.claudeCodeInstalled, let updateButtonLabel {
-            HStack {
-                Spacer()
-                Button(updateButtonLabel, action: applyUpdate)
-                    .buttonStyle(.borderless)
-            }
-        }
-    }
-
-    private var statusText: String {
-        if !manager.claudeCodeInstalled {
-            return "Claude Code not detected"
-        }
-        if manager.hasConflict {
-            return "Another skill with this name already exists"
-        }
-        if let syncText {
-            return syncText
-        }
-        return "Allow Claude to add replacement rules"
-    }
-
-    private var statusColor: Color {
-        if manager.hasConflict { return .orange }
-        if !manager.claudeCodeInstalled { return .secondary }
-        return .accentColor
-    }
-
-    private var syncText: String? {
-        switch manager.syncStatus {
-        case .upToDate: return nil
-        case .updateAvailable: return "Update available"
-        case .modified: return "Modified"
-        case .modifiedAndUpdateAvailable: return "Modified; update available"
-        }
-    }
-
-    private var updateButtonLabel: String? {
-        switch manager.syncStatus {
-        case .upToDate: return nil
-        case .updateAvailable: return "Update"
-        case .modified: return "Reset to default"
-        case .modifiedAndUpdateAvailable: return "Update and overwrite edits"
-        }
-    }
-
-    private func toggle(_ on: Bool) {
-        do {
-            try on ? manager.enable() : manager.disable()
-        } catch {
-            appState.toast.showError(
-                title: on ? "Couldn't Enable Skill" : "Couldn't Disable Skill",
-                message: error.localizedDescription
-            )
-            manager.refresh()
-        }
-    }
-
-    private func applyUpdate() {
-        do {
-            try manager.applyBundledVersion()
-        } catch {
-            appState.toast.showError(
-                title: "Update Failed",
-                message: error.localizedDescription
-            )
         }
     }
 }

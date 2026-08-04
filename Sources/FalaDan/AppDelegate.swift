@@ -221,8 +221,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupServices() async {
-        ClaudeSkillManager.shared.syncBundleToDocumentsIfClean()
-
         let permissions = appState.permissions
         permissions.refresh()
 

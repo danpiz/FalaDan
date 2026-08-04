@@ -95,12 +95,6 @@ PLIST
 
 cp "Sources/FalaDan/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/"
 
-# Ship Claude Code skills alongside the app so users can toggle them on
-# from Settings. See Services/ClaudeSkillManager.swift for the sync logic.
-if [ -d "Sources/FalaDan/Resources/skills" ]; then
-    cp -R "Sources/FalaDan/Resources/skills" "$APP_BUNDLE/Contents/Resources/"
-fi
-
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
