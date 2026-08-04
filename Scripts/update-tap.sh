@@ -38,7 +38,6 @@ cask "faladan" do
   desc "Voice-to-text transcription from the menu bar"
   homepage "https://github.com/danpiz/FalaDan"
 
-  auto_updates true
   # bare symbol means ">= Sonoma"
   depends_on macos: :sonoma
 

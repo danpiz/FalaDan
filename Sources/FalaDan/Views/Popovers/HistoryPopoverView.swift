@@ -308,6 +308,7 @@ private struct HistoryPopoverRow: View {
             case .default: return "Default"
             case .multilingual: return "Multilingual"
             case .custom: return "Custom"
+            case .groq: return "Groq"
             }
         }
         let lower = model.lowercased()

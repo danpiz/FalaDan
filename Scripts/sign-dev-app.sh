@@ -75,7 +75,7 @@ choose_identity() {
 
 IDENTITY=$(choose_identity)
 if [[ "$REQUIRE_DEVELOPER_ID" == true && "$IDENTITY" == "-" ]]; then
-    echo "No Developer ID Application identity found; Sparkle stays disabled without it." >&2
+    echo "No Developer ID Application identity found." >&2
     exit 1
 fi
 
@@ -87,25 +87,7 @@ sign_if_present() {
     codesign --force --sign "$IDENTITY" "$item"
 }
 
-SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
-if [[ -d "$SPARKLE" ]]; then
-    for item in \
-        "$SPARKLE/Versions/B/Sparkle" \
-        "$SPARKLE/Versions/B/Autoupdate" \
-        "$SPARKLE/Versions/B/Updater.app/Contents/MacOS/Updater" \
-        "$SPARKLE/Versions/B/Updater.app" \
-        "$SPARKLE/Versions/B/XPCServices/Downloader.xpc/Contents/MacOS/Downloader" \
-        "$SPARKLE/Versions/B/XPCServices/Downloader.xpc" \
-        "$SPARKLE/Versions/B/XPCServices/Installer.xpc/Contents/MacOS/Installer" \
-        "$SPARKLE/Versions/B/XPCServices/Installer.xpc" \
-        "$SPARKLE/Versions/B" \
-        "$SPARKLE"; do
-        sign_if_present "$item"
-    done
-fi
-
 sign_if_present "$APP/Contents/Frameworks/whisper.framework"
-sign_if_present "$APP/Contents/Resources/faladancli"
 
 codesign --force --sign "$IDENTITY" \
     --entitlements "$ENTITLEMENTS" \

@@ -49,6 +49,10 @@ nothing", since cleanup failure is silent by design.
 time on a running app; dead subsystems are deleted at the end. `./Scripts/verify.sh` must pass
 at every task boundary — including throughout the strip phase.
 
+**The Phase 5 strip is done.** The CLI target, Sparkle auto-update, and the Claude Code skill
+manager are gone. `docs/removed-features.md` records what was removed and why — read it before
+assuming something is missing by accident.
+
 ## Orchestration
 
 Opus plans and reviews. Sonnet executes. This is a design constraint, not a preference — see

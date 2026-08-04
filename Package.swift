@@ -9,14 +9,12 @@ let package = Package(
     ],
     products: [
         .executable(name: "FalaDan", targets: ["FalaDan"]),
-        .executable(name: "faladancli", targets: ["FalaDanCLI"]),
     ],
     dependencies: [
         .package(
             url: "https://github.com/FluidInference/FluidAudio.git",
             .upToNextMinor(from: "0.12.6")
         ),
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.1"),
     ],
     targets: [
         .executableTarget(
@@ -24,24 +22,11 @@ let package = Package(
             dependencies: [
                 "FluidAudio",
                 "whisper",
-                .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources/FalaDan",
             exclude: ["Resources"],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
-                .define("ENABLE_SPARKLE"),
-            ]
-        ),
-        .executableTarget(
-            name: "FalaDanCLI",
-            dependencies: [
-                "FluidAudio",
-                "whisper",
-            ],
-            path: "Sources/FalaDanCLI",
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
         .binaryTarget(

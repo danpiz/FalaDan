@@ -2,7 +2,6 @@ import SwiftUI
 
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.updaterController) private var updaterController
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,12 +14,6 @@ struct MenuBarView: View {
 
             if !appState.permissions.allGranted {
                 PermissionsBanner()
-                    .padding(.horizontal, 16)
-                    .padding(.top, 14)
-            }
-
-            if let updaterController, !updaterController.updateViewModel.state.isIdle {
-                UpdateBanner(model: updaterController.updateViewModel)
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
             }
@@ -647,7 +640,6 @@ private struct PermissionRow: View {
 
 private struct FooterBarView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.updaterController) private var updaterController
     @StateObject private var launchManager = LaunchAtLoginManager.shared
     @State private var showHistory = false
     @State private var showReplacements = false
@@ -711,10 +703,7 @@ private struct FooterBarView: View {
             .popover(isPresented: $showSettings, arrowEdge: .bottom) {
                 SettingsPopoverView {
                     showSettings = false
-                    FalaDanSettingsWindowController.shared.open(
-                        appState: appState,
-                        updaterController: updaterController
-                    )
+                    FalaDanSettingsWindowController.shared.open(appState: appState)
                 }
                 .popoverFocusSink()
                 .resignsResponderOnClose()
@@ -739,6 +728,7 @@ private struct FooterBarView: View {
         case .default: return "waveform"
         case .multilingual: return "globe"
         case .custom: return "server.rack"
+        case .groq: return "cloud.fill"
         }
     }
 

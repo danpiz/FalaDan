@@ -87,9 +87,9 @@ final class FalaDanSettingsWindowController: NSWindowController, NSToolbarDelega
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    func open(appState: AppState, updaterController: UpdaterProviding?) {
+    func open(appState: AppState) {
         if window == nil {
-            configureWindow(appState: appState, updaterController: updaterController)
+            configureWindow(appState: appState)
         }
 
         resizeWindow(for: nav.selectedTab, animate: false)
@@ -98,10 +98,9 @@ final class FalaDanSettingsWindowController: NSWindowController, NSToolbarDelega
         window?.makeKeyAndOrderFront(nil)
     }
 
-    private func configureWindow(appState: AppState, updaterController: UpdaterProviding?) {
+    private func configureWindow(appState: AppState) {
         let rootView = FalaDanSettingsView()
             .environment(appState)
-            .environment(\.updaterController, updaterController)
         let host = NSHostingController(rootView: rootView)
         let window = NSWindow(contentViewController: host)
         window.title = "FalaDan Settings"
@@ -180,9 +179,7 @@ final class FalaDanSettingsWindowController: NSWindowController, NSToolbarDelega
 
 private struct GeneralSettingsPage: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.updaterController) private var updaterController
     @StateObject private var launchManager = LaunchAtLoginManager.shared
-    @State private var autoUpdateEnabled = true
     @State private var vadEnabled = VADSettings.enabled
 
     var body: some View {
@@ -197,21 +194,6 @@ private struct GeneralSettingsPage: View {
                         set: { launchManager.isEnabled = $0 }
                     )
                 )
-
-                Toggle(
-                    "Check for updates automatically",
-                    isOn: Binding(
-                        get: { autoUpdateEnabled },
-                        set: {
-                            autoUpdateEnabled = $0
-                            updaterController?.automaticallyChecksForUpdates = $0
-                        }
-                    )
-                )
-
-                LabeledContent("Check for updates") {
-                    updateCheckContent
-                }
             }
 
             Section("Transcription") {
@@ -245,76 +227,8 @@ private struct GeneralSettingsPage: View {
         }
         .onAppear {
             launchManager.refresh()
-            autoUpdateEnabled = updaterController?.automaticallyChecksForUpdates ?? true
             vadEnabled = VADSettings.enabled
         }
-    }
-
-    /// Mirrors the live update state next to the Check Now button, since the
-    /// menu popover (where the full banner lives) is closed while the user
-    /// is in this window.
-    @ViewBuilder private var updateCheckContent: some View {
-        switch updaterController?.updateViewModel.state ?? .idle {
-        case .idle:
-            checkNowButton
-
-        case .checking:
-            HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("Checking…")
-                    .foregroundStyle(.secondary)
-            }
-
-        case .updateAvailable(let update):
-            Button("Install \(update.version)") {
-                update.install()
-            }
-
-        case .downloading(let download):
-            Text(
-                download.fraction.map { "Downloading… \(Int($0 * 100))%" }
-                    ?? "Downloading…"
-            )
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-
-        case .extracting:
-            Text("Preparing…")
-                .foregroundStyle(.secondary)
-
-        case .installing:
-            Text("Installing… FalaDan will relaunch")
-                .foregroundStyle(.secondary)
-
-        case .notFound:
-            Text("You're up to date")
-                .foregroundStyle(.secondary)
-
-        case .failed:
-            HStack(spacing: 8) {
-                Text("Update failed")
-                    .foregroundStyle(.secondary)
-                checkNowButton
-            }
-        }
-    }
-
-    private var checkNowButton: some View {
-        Button("Check Now") {
-            guard updaterController?.updateViewModel.state.allowsManualCheck == true else {
-                return
-            }
-            updaterController?.checkForUpdates(nil)
-        }
-        .disabled(updateCheckDisabled)
-    }
-
-    private var updateCheckDisabled: Bool {
-        guard let updaterController, updaterController.isAvailable else {
-            return true
-        }
-        return !updaterController.updateViewModel.state.allowsManualCheck
     }
 }
 
@@ -398,19 +312,7 @@ private struct IntegrationSettingsPage: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        @Bindable var appState = appState
-
         Form {
-            Section("Command Line") {
-                CLIInstallSettingsRow()
-            }
-
-            Section("Agent Skills") {
-                Toggle("Enable replacements", isOn: $appState.replacementSettings.enabled)
-                ClaudeSkillSettingsRow()
-                    .disabled(!appState.replacementSettings.enabled)
-            }
-
             Section("Files") {
                 Button("Open FalaDan Folder") {
                     NSWorkspace.shared.selectFile(
@@ -430,226 +332,6 @@ private struct IntegrationSettingsPage: View {
         }
         .formStyle(.grouped)
         .padding(.horizontal, 4)
-        .onChange(of: appState.replacementSettings) {
-            appState.replacementSettings.save()
-        }
-    }
-}
-
-private struct CLIInstallSettingsRow: View {
-    @Environment(AppState.self) private var appState
-    private let manager = CLIInstallManager.shared
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("FalaDan CLI")
-                Text(statusText)
-                    .font(.caption)
-                    .foregroundStyle(statusColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
-            Button(primaryButtonTitle, action: primaryAction)
-                .disabled(primaryButtonDisabled)
-        }
-        .onAppear { manager.refresh() }
-
-        if manager.hasConflict || manager.isInstalled || manager.isBroken {
-            HStack {
-                Text(manager.managedInstallPath)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                Spacer()
-
-                Button("Reveal") { manager.revealInstallLocation() }
-                    .buttonStyle(.borderless)
-            }
-        }
-    }
-
-    private var statusText: String {
-        if !manager.bundledCLIAvailable {
-            return "CLI binary missing from this app build"
-        }
-        if manager.hasConflict {
-            return "A different faladancli already exists at \(manager.displayInstallPath)"
-        }
-        if manager.isBroken {
-            return "Install is broken; repair the managed copy"
-        }
-        if manager.needsUpdate {
-            return "Update available at \(manager.displayInstallPath)"
-        }
-        if manager.isInstalled {
-            return "Installed at \(manager.displayInstallPath)"
-        }
-        return "Install to \(manager.displayInstallPath)"
-    }
-
-    private var statusColor: Color {
-        if manager.hasConflict || manager.isBroken { return .orange }
-        if manager.needsUpdate || manager.isInstalled { return .accentColor }
-        return .secondary
-    }
-
-    private var primaryButtonTitle: String {
-        if manager.hasConflict { return "Blocked" }
-        if !manager.bundledCLIAvailable { return "Unavailable" }
-        if manager.isBroken { return "Repair" }
-        if manager.needsUpdate { return "Update" }
-        if manager.isInstalled { return "Uninstall" }
-        return "Install"
-    }
-
-    private var primaryButtonDisabled: Bool {
-        manager.hasConflict || !manager.bundledCLIAvailable
-    }
-
-    private func primaryAction() {
-        if manager.isInstalled, !manager.needsUpdate, !manager.isBroken {
-            uninstall()
-        } else {
-            installOrUpdate()
-        }
-    }
-
-    private func installOrUpdate() {
-        do {
-            try manager.installOrUpdate()
-            appState.toast.showInfo(
-                title: "CLI Installed",
-                message: "\(manager.displayInstallPath) is ready."
-            )
-        } catch {
-            appState.toast.showError(
-                title: "Couldn't Install CLI",
-                message: error.localizedDescription
-            )
-            manager.refresh()
-        }
-    }
-
-    private func uninstall() {
-        do {
-            try manager.uninstall()
-            appState.toast.showInfo(title: "CLI Uninstalled")
-        } catch {
-            appState.toast.showError(
-                title: "Couldn't Uninstall CLI",
-                message: error.localizedDescription
-            )
-            manager.refresh()
-        }
-    }
-}
-
-private struct ClaudeSkillSettingsRow: View {
-    @Environment(AppState.self) private var appState
-    private let manager = ClaudeSkillManager.shared
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Claude Code replacement skill")
-                Text(statusText)
-                    .font(.caption)
-                    .foregroundStyle(statusColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
-            Toggle(
-                "",
-                isOn: Binding(
-                    get: { manager.isEnabled },
-                    set: { toggle($0) }
-                )
-            )
-            .labelsHidden()
-            .disabled(!manager.claudeCodeInstalled || manager.hasConflict)
-        }
-        .onAppear { manager.refresh() }
-
-        if manager.hasConflict {
-            HStack {
-                Spacer()
-                Button("Reveal Conflict") { manager.revealConflictInFinder() }
-                    .buttonStyle(.borderless)
-            }
-        } else if manager.claudeCodeInstalled, let updateButtonLabel {
-            HStack {
-                Spacer()
-                Button(updateButtonLabel, action: applyUpdate)
-                    .buttonStyle(.borderless)
-            }
-        }
-    }
-
-    private var statusText: String {
-        if !manager.claudeCodeInstalled {
-            return "Claude Code not detected"
-        }
-        if manager.hasConflict {
-            return "Another skill with this name already exists"
-        }
-        if let syncText {
-            return syncText
-        }
-        return "Allow Claude to add replacement rules"
-    }
-
-    private var statusColor: Color {
-        if manager.hasConflict { return .orange }
-        if !manager.claudeCodeInstalled { return .secondary }
-        return .accentColor
-    }
-
-    private var syncText: String? {
-        switch manager.syncStatus {
-        case .upToDate: return nil
-        case .updateAvailable: return "Update available"
-        case .modified: return "Modified"
-        case .modifiedAndUpdateAvailable: return "Modified; update available"
-        }
-    }
-
-    private var updateButtonLabel: String? {
-        switch manager.syncStatus {
-        case .upToDate: return nil
-        case .updateAvailable: return "Update"
-        case .modified: return "Reset to default"
-        case .modifiedAndUpdateAvailable: return "Update and overwrite edits"
-        }
-    }
-
-    private func toggle(_ on: Bool) {
-        do {
-            try on ? manager.enable() : manager.disable()
-        } catch {
-            appState.toast.showError(
-                title: on ? "Couldn't Enable Skill" : "Couldn't Disable Skill",
-                message: error.localizedDescription
-            )
-            manager.refresh()
-        }
-    }
-
-    private func applyUpdate() {
-        do {
-            try manager.applyBundledVersion()
-        } catch {
-            appState.toast.showError(
-                title: "Update Failed",
-                message: error.localizedDescription
-            )
-        }
     }
 }
 

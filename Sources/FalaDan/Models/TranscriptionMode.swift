@@ -8,13 +8,41 @@ enum TranscriptionMode: String, Codable, Sendable {
     case `default` = "english"
     case multilingual
     case custom
+    case groq
+
+    /// Whether the underlying model is Whisper.
+    ///
+    /// Matters because Whisper hallucinates on silence and Parakeet does not —
+    /// see `TranscriptSubstance`. `.custom` counts: it posts to an
+    /// OpenAI-compatible `/v1/audio/transcriptions`, which in practice is
+    /// Whisper or something trained to imitate it.
+    var usesWhisperFamilyModel: Bool {
+        switch self {
+        case .default: return false
+        case .multilingual, .custom, .groq: return true
+        }
+    }
 
     var modelDisplayName: String {
         switch self {
         case .default: return "Parakeet"
         case .multilingual: return "Whisper"
         case .custom: return "Custom"
+        case .groq: return "Groq"
         }
+    }
+
+    /// The mode to actually use, given what was stored and what `.env` provides.
+    ///
+    /// Groq's row is hidden when unconfigured, which strands anyone who selected
+    /// it and then removed the key: the stored mode is `.groq`, the row is gone,
+    /// and there is nothing to click. Falling back to the local default is the
+    /// only outcome that leaves a working app.
+    static func resolvingStoredMode(
+        _ stored: TranscriptionMode, isGroqConfigured: Bool
+    ) -> TranscriptionMode {
+        guard stored == .groq, !isGroqConfigured else { return stored }
+        return .default
     }
 }
 

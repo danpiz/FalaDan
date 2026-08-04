@@ -1,109 +1,119 @@
-# HANDOFF — FalaDan Phase 2
+# HANDOFF — FalaDan
 
-**State:** Phase 2 complete. All 11 tasks done, final whole-branch review done with five fix
-rounds applied, manual verification passed. Ready to merge.
-**Branch:** `phase-2/env-config-and-cleanup`, off `main` @ `28318c2`. Working tree clean.
-**Verified:** `./Scripts/verify.sh` — **226 tests in 42 suites passing**.
+**State:** Phases 2–5 are code-complete and reviewed. **Three branches are unmerged and waiting
+on Dan's manual verification.**
+**Verified:** `./Scripts/verify.sh` passes on each branch. Latest (`phase-5/strip`): **239 tests
+in 45 suites**.
 
-## What Phase 2 did
+## Branch stack — read this first
 
-FalaDan now uses Dan's own API key from a `.env` file, cleans up **every** dictation through an
-OpenAI-compatible LLM, and contains no code that borrows another application's credentials.
+They are stacked, each branched off the last. Merge in order, or merge the tip once all three
+manual passes are done.
 
-The phase's goal check — this must keep printing nothing:
-
-```bash
-grep -rn --include="*.swift" -e "codex/auth" -e "claude-cli" -e "codex_cli" -e "OAuth" Sources/
+```
+main
+ └── phase-4/recording-indicator   ← floating pill        (239 tests)
+      └── phase-3/groq-transcription ← Groq as a model    (256 tests)
+           └── phase-5/strip         ← deletions          (239 tests)
 ```
 
-Spec: `docs/superpowers/specs/2026-08-02-phase-2-env-config-and-cleanup.md`
-Plan: `docs/superpowers/plans/2026-08-02-phase-2-env-config-and-cleanup.md`
-Full execution record — every review finding, every ruling, every deferred minor:
-`.superpowers/sdd/2026-08-02-phase-2-env-config-and-cleanup/progress.md` (git-ignored)
+Phase 5's lower count is correct — the updater's tests went with the updater.
 
-## Done
+## What each branch does, and what Dan must check
 
-| Task | Outcome |
-|---|---|
-| 1. `EnvConfig` | 1 fix round — guard was not self-sufficient |
-| 2. `CleanupClient` | 1 fix round — quoted values leaked whitespace into the key |
-| 3. Always-on cleanup | 1 fix round — failure log said only "error 2" |
-| 4. Delete `⌥R` shortcut | clean |
-| 5. Delete OAuth stack | clean — **phase goal met** |
-| 6. Delete EditMode (18 files) | clean — found a stranded Keychain key |
-| 7. Rename flag, tidy UI, sweep key | 1 fix round — migration gave up on failure |
-| 8. Wire `MIN_HOLD_MS` / `MIN_TRANSCRIBE_MS` | clean |
-| 9. Generation token | clean at the time; the final review corrected its comments |
-| 10. `.env.example`, README, docs | clean |
-| — | Out of plan: strip `<think>` reasoning blocks |
-| — | Final whole-branch review: 1 Critical, 3 Important, 5 fix rounds |
+### `phase-4/recording-indicator`
 
-## Task 11 — done, all checks passed
+A pill at the bottom of the screen while recording, shown only after the hold clears
+`MIN_HOLD_MS` so a brushed Fn never flashes it, and dismissed on all six paths a recording can
+end.
 
-Verified by Dan on 2026-08-03, on a real build:
+1. Hold Fn two seconds — pill appears bottom centre, goes on release
+2. **Brush Fn fifteen or twenty times** — must never flash, never stick
+3. Hold, then Esc — pill goes, recording cancelled
+4. Dictate into a **full-screen** app — pill visible over it, text still lands
+5. **Focus check:** click into a text field in another app, dictate, confirm the caret does not
+   move and the text arrives there. The panel must never take focus, or the paste goes nowhere
 
-1. **No `.env` at all** — raw transcript pasted immediately, no toast, no dialog, indicator
-   cleared. Confirmed objectively as well: zero cleanup entries in the log for that run, so
-   `isCleanupConfigured` stopped the call rather than the call failing quietly. This was the
-   phase's main risk.
-2. **With `.env`** — fillers removed, the "scratch that" backtrack honoured, "their" → "they're".
-3. **Latency** — ~0.5s, judged acceptable.
-4. **Invalid key** — raw text still pasted, no dialog; log reads `Cleanup failed: HTTP 401`,
-   confirming Task 3's fix live. No key material in the log.
-5. **Proper nouns** — "Sarah" and "Lisbon" both came back capitalised. The
-   `applyFormatting`-after-cleanup hazard did not reproduce.
-6. Third-party app paste and the Fn-brush discard path both confirmed.
+### `phase-3/groq-transcription`
 
-**The branch is ready to merge.** Next step is `superpowers:finishing-a-development-branch`.
+A fourth model-picker row, **Groq**, configured by `STT_BASE_URL` / `STT_API_KEY` / `STT_MODEL`
+in `.env`. Hidden unless both a key and a model are set.
 
-## Needs Dan's decision — before any release
+1. No `STT_*` — row absent, Parakeet unchanged
+2. Configure and relaunch — row present, subtitle shows the model id
+3. **The point of the phase:** dictate the same difficult passage on Parakeet and on Groq, back
+   to back, and decide whether the accuracy is worth the audio upload
+4. Switch back to Default mid-session — no relaunch needed
+5. Select Groq, remove the key, relaunch — falls back to Parakeet, app usable, log says why
 
-`version.env`'s `SU_PUBLIC_ED_KEY` is **upstream's** Sparkle public key, inherited at the fork
-and never changed. Dan cannot sign an update this app would accept; upstream could produce one
-(they could not deliver it — the feed is under Dan's control now). Run `generate_keys` from
-sparkle-tools and replace it before publishing anything. `appcast.xml` is empty and says so.
+### `phase-5/strip`
 
-Not urgent: no release exists, and an unsigned or wrongly-signed update fails closed — Sparkle
-rejects it.
+Deleted the `faladancli` target and its installer, Sparkle auto-update, and the Claude Code skill
+manager. **Kept** text replacements, spoken symbols, usage stats and recording history — Dan's
+call, made after using the app.
 
-## Dan's environment, already set up
+1. `just dev` — builds, installs, launches
+2. `codesign -dv --verbose=2 /Applications/FalaDan.app 2>&1 | grep Authority` → wants
+   `Authority=FalaDan Dev Signing`, **not** `Signature=adhoc`. Sparkle's framework shared the
+   signing path, so this is the check that matters most here
+3. **Text replacements still work** — add a rule in Settings and confirm it applies
+4. Settings opens with no empty sections where the CLI, update and skill controls were
+5. Hold Fn, dictate — text lands
 
-- `~/Library/Application Support/FalaDan/.env`, mode 600 — Groq key, `llama-3.3-70b-versatile`
-- Local signing identity exists, so Accessibility survives rebuilds. Verify with:
-  `codesign -dv --verbose=2 /Applications/FalaDan.app 2>&1 | grep Authority` → want
-  `Authority=FalaDan Dev Signing`, **not** `Signature=adhoc`
+## What was deleted, and how to get it back
+
+`docs/removed-features.md` describes each removed subsystem — what it did, how it worked, and why
+it went — written *before* deletion so it is accurate rather than reconstructed from a diff. Read
+it before rebuilding any of them; the code itself is behind you in git.
+
+## Diagnostics
+
+```bash
+# /usr/bin/log, not `log` — zsh has a builtin of that name that shadows it
+/usr/bin/log show --predicate 'subsystem == "com.faladan.dev"' --last 5m | grep "Loaded config"
+```
+
+Prints the host, whether each key is set, and whether cleanup is configured. Nothing
+user-supplied is echoed. This is the only way to tell "no `.env` found" from "cleanup ran and
+changed nothing", since cleanup failure is silent by design.
 
 ## Things that will bite otherwise
 
 - **`./Scripts/verify.sh` is the only verification command.** Bare `swift test` fails on this
   machine — Swift Testing's framework and its interop dylib sit in two unsearched directories.
-- **Never reintroduce credential reuse.** The grep at the top is the guard.
+- **Never reintroduce credential reuse.** This must keep printing nothing:
+  `grep -rn --include="*.swift" -e "codex/auth" -e "claude-cli" -e "codex_cli" -e "OAuth" Sources/`
 - **Do not reintroduce a shape heuristic in `EnvConfig.description`.** Three fix rounds tried to
   echo the model id and base URL while filtering anything key-shaped; each closed one hole and
   opened another. A key can land in any field, and a UUID-format token is structurally identical
-  to an ordinary identifier — there is no rule to find. It now echoes no user-supplied string.
+  to an ordinary identifier. It now echoes no user-supplied string.
+- **`Package.swift`'s `whisper` binary target points at `andyhtran/MiniWhisper` on purpose.** That
+  is a real published artifact. "Fixing" it to this fork's URL gives a 404 and a dead build.
 - **The `.env` fallback is cwd-relative, not repo-relative.** `just dev` launches from
-  `/Applications` with `open`, so a repo-root `.env` is silently ignored.
-- **Model benchmark (Dan's key, real prompt):** `llama-3.3-70b-versatile` 0.51s (best, nothing
-  dropped) · `llama-3.1-8b-instant` 0.48s (drops a clause) · `openai/gpt-oss-20b` 0.83s ·
+  `/Applications`, so a repo-root `.env` is silently ignored. Use Application Support.
+- **Model benchmark (Dan's key, real prompt):** `llama-3.3-70b-versatile` 0.51s (best) ·
+  `llama-3.1-8b-instant` 0.48s (drops a clause) · `openai/gpt-oss-20b` 0.83s ·
   `qwen/qwen3.6-27b` 4.13s and emits `<think>` blocks.
 - **Reasoning models paste their chain of thought** unless stripped. `stripReasoningBlocks`
-  handles it; there is a verbatim-capture fixture in `CleanupReasoningFixtureTests.swift`. It
-  searches the string directly — searching a `lowercased()` copy and reusing those indices is
-  the bug the final review caught, and it corrupts or crashes on non-ASCII.
+  handles it. It searches the string directly — searching a `lowercased()` copy and reusing those
+  indices corrupts or crashes on non-ASCII, which a review caught.
 
 ## Deferred, with reasons
 
-- Edit mode's old 0.5s floor is gone with the feature; recording's floor is now `.env`-driven.
+- `AppState.toggleRecording()` still has no callers. It survived the strip, which was scoped to
+  whole subsystems. It carries a precondition comment and is the one path that could apply a
+  stale parked hold release — do not give it a caller without reading that comment.
+- A fast double-brush during device open can show a spurious "Recording Too Short" toast.
 - `MenuBarView.cleanupCharThreshold` lowered 30k → 4k by estimate, not measurement.
-- `unrelatedShortcutsAllSurvive` asserts a count a duplicate name would also satisfy.
-- `AppState.toggleRecording()` still has no callers. Retained deliberately for the strip phase —
-  but it now carries a precondition, and it is the one path that could apply a stale parked
-  release. Do not give it a caller without reading that comment.
-- A fast double-brush during device open can show a spurious "Recording Too Short" toast. Design
-  intent is that a brush leaves no trace; nothing is pasted and no history row is written.
 - A key pasted *after* a scheme (`https://gsk_…`) still echoes as the logged host. Defending it
   means guessing key-vs-hostname by shape, which is the trap above.
-- `llmModel` renders verbatim in the History popover via `RecordingCleanup.backendModel`.
-- Leftovers from the fork: `ReleaseNotes/MiniWhisper-1.10.0.html`,
-  `.github/MiniWhisper-wordmark.svg`, and an "Andy Tran" copyright in the Info.plist.
+- `ModelLoadCoordinator`'s `guard mode != .custom, mode != .groq` is a non-exhaustive negative
+  test. A fifth remote mode would compile while leaving it stale — which is exactly the bug Phase
+  3 shipped once. Invert it to an exhaustive switch if a fifth mode is ever added.
+- `CustomProviderError.serverError` puts the raw response body in a toast, and some providers
+  echo a key fragment in 401 bodies. Transient UI only, never logged.
+- `IntegrationSettingsPage` declares 500pt for content that is now much shorter.
+- Orphaned `UserDefaults` keys from the updater (`autoUpdateEnabled`, `SU*`,
+  `UpdateSimulatorScenario`). `just reset-settings` clears them.
+- `~/Documents/FalaDan/skills/mw-replace/` is left on disk by the deleted skill manager. Nothing
+  reads it; `rm -rf` when convenient.

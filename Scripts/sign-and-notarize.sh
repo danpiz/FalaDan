@@ -17,12 +17,6 @@ for fw in "$APP_BUNDLE"/Contents/Frameworks/*.framework; do
     [ -d "$fw" ] && codesign --force --timestamp --options runtime --sign "$SIGNING_ID" "$fw"
 done
 
-CLI_BIN="$APP_BUNDLE/Contents/Resources/faladancli"
-if [[ -f "$CLI_BIN" ]]; then
-    echo "==> Signing faladancli..."
-    codesign --force --timestamp --options runtime --sign "$SIGNING_ID" "$CLI_BIN"
-fi
-
 echo "==> Signing with: $SIGNING_ID"
 codesign --force --timestamp --options runtime \
     --sign "$SIGNING_ID" \

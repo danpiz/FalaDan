@@ -118,6 +118,48 @@ struct EnvConfigParsingTests {
         #expect(EnvConfig.parse("LLM_MODEL=crlf\r\n").llmModel == "crlf")
         #expect(EnvConfig.parse("MIN_HOLD_MS=200\r\n").minHoldMS == 200)
     }
+
+    @Test func parsesTheSttBlock() {
+        let c = EnvConfig.parse(
+            """
+            STT_BASE_URL=https://api.groq.com/openai/v1
+            STT_API_KEY=gsk_example
+            STT_MODEL=whisper-large-v3-turbo
+            """)
+        #expect(c.sttBaseURL == "https://api.groq.com/openai/v1")
+        #expect(c.sttAPIKey == "gsk_example")
+        #expect(c.sttModel == "whisper-large-v3-turbo")
+        #expect(c.isGroqTranscriptionConfigured)
+    }
+
+    /// The row is hidden unless both are present, so every partial case must
+    /// report unconfigured rather than half-working.
+    @Test func groqTranscriptionNeedsBothAKeyAndAModel() {
+        var keyOnly = EnvConfig.defaults
+        keyOnly.sttAPIKey = "gsk_example"
+        #expect(!keyOnly.isGroqTranscriptionConfigured)
+
+        var modelOnly = EnvConfig.defaults
+        modelOnly.sttModel = "whisper-large-v3"
+        #expect(!modelOnly.isGroqTranscriptionConfigured)
+
+        var blank = EnvConfig.defaults
+        blank.sttAPIKey = "   "
+        blank.sttModel = "whisper-large-v3"
+        #expect(!blank.isGroqTranscriptionConfigured)
+
+        var blankModel = EnvConfig.defaults
+        blankModel.sttAPIKey = "gsk_example"
+        blankModel.sttModel = "  "
+        #expect(!blankModel.isGroqTranscriptionConfigured)
+
+        #expect(!EnvConfig.defaults.isGroqTranscriptionConfigured)
+    }
+
+    @Test func sttBaseURLFallsBackToTheGroqDefault() {
+        let c = EnvConfig.parse("STT_API_KEY=gsk_example")
+        #expect(c.sttBaseURL == "https://api.groq.com/openai/v1")
+    }
 }
 
 /// Whether the cleanup call should be attempted at all. This is the single
@@ -300,5 +342,36 @@ struct EnvConfigRedactionTests {
         #expect(bare.description.contains("key: <unset>"))
         #expect(bare.description.contains("model: <unset>"))
         #expect(bare.description.contains("configured: false"))
+    }
+
+    /// `STT_*` follows the Phase 2 ruling: presence and host, never the value.
+    @Test func noSttFieldEchoesItsValue() {
+        for stray in [
+            "gsk_" + String(repeating: "a1B2c3D4", count: 6),
+            "3f2a91c4-7b8e-4d2f-9a10-6c5e8b4d2f71",
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+        ] {
+            var key = EnvConfig.defaults
+            key.sttAPIKey = stray
+            #expect(!key.description.contains(stray), "leaked via sttAPIKey")
+
+            var model = EnvConfig.defaults
+            model.sttModel = stray
+            #expect(!model.description.contains(stray), "leaked via sttModel")
+
+            var base = EnvConfig.defaults
+            base.sttBaseURL = stray
+            #expect(!base.description.contains(stray), "leaked via sttBaseURL")
+        }
+    }
+
+    @Test func descriptionReportsSttPresence() {
+        var configured = EnvConfig.defaults
+        configured.sttAPIKey = "gsk_example"
+        configured.sttModel = "whisper-large-v3-turbo"
+        #expect(configured.description.contains("sttKey: <set>"))
+        #expect(configured.description.contains("sttModel: <set>"))
+
+        #expect(EnvConfig.defaults.description.contains("sttKey: <unset>"))
     }
 }
