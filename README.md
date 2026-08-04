@@ -48,6 +48,9 @@ ad-hoc signing on every `just dev` — see [Troubleshooting](#troubleshooting).
   spoken corrections like "scratch that", on every dictation
 - **On-device transcription** — with Parakeet or whisper.cpp, audio never leaves your Mac
 
+See [`docs/removed-features.md`](docs/removed-features.md) for subsystems that were part of the
+original fork and were deliberately removed.
+
 ### What leaves your machine
 
 No recording and no transcript, by default. Three things change that, and all are opt-in:
