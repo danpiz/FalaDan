@@ -68,11 +68,8 @@ FalaDan does make network requests that carry none of your content:
 - **Model downloads.** No model ships in the app bundle. Parakeet is fetched from Hugging Face
   on first launch, and whisper.cpp (~1GB, plus a VAD model) the first time you select it. Both
   are cached; after that, transcription is offline.
-- **Update checks**, in signed release builds only. `just dev` builds have the update feed
-  disabled.
-
-So: once a model is cached, a `just dev` build with no `.env` makes no further requests at all,
-and a signed release build makes only the update check.
+So: once a model is cached, a build with no `.env` makes no further requests at all. FalaDan has
+no update check, no telemetry, and no crash reporting.
 
 ## Configuration
 

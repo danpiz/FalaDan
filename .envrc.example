@@ -2,7 +2,7 @@
 # If using direnv, run: direnv allow
 
 # Code signing. Local dev auto-detects a Developer ID Application identity when available
-# so `just dev` and `just test-update` share the same Accessibility permission scope.
+# so `just dev` keeps a stable Accessibility permission scope.
 export CODESIGN_IDENTITY=""   # optional explicit "Developer ID Application: Example (TEAMID)"
 export CODESIGN_TEAM_ID=""    # your Apple team ID, leave empty for local-only builds
 

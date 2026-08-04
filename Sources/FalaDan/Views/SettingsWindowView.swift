@@ -312,13 +312,7 @@ private struct IntegrationSettingsPage: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        @Bindable var appState = appState
-
         Form {
-            Section("Replacements") {
-                Toggle("Enable replacements", isOn: $appState.replacementSettings.enabled)
-            }
-
             Section("Files") {
                 Button("Open FalaDan Folder") {
                     NSWorkspace.shared.selectFile(
@@ -338,9 +332,6 @@ private struct IntegrationSettingsPage: View {
         }
         .formStyle(.grouped)
         .padding(.horizontal, 4)
-        .onChange(of: appState.replacementSettings) {
-            appState.replacementSettings.save()
-        }
     }
 }
 
