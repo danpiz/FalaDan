@@ -24,6 +24,13 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
     var llmCleanupEnabled: Bool
     var minHoldMS: Int
     var minTranscribeMS: Int
+    /// OpenAI-compatible transcription endpoint. Sends **audio**, unlike the
+    /// cleanup endpoint, which only ever sees text.
+    var sttBaseURL: String
+    var sttAPIKey: String?
+    /// No default, for the same reason as `llmModel`: hosted model ids get
+    /// renamed and retired, and a stale one here is worse than an empty one.
+    var sttModel: String?
 
     static let defaults = EnvConfig(
         llmBaseURL: "https://api.groq.com/openai/v1",
@@ -31,7 +38,10 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
         llmModel: nil,
         llmCleanupEnabled: true,
         minHoldMS: 150,
-        minTranscribeMS: 300
+        minTranscribeMS: 300,
+        sttBaseURL: "https://api.groq.com/openai/v1",
+        sttAPIKey: nil,
+        sttModel: nil
     )
 
     /// Whether to attempt the cleanup call at all.
@@ -46,6 +56,20 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
             !key.isEmpty
         else { return false }
         guard let model = llmModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !model.isEmpty
+        else { return false }
+        return true
+    }
+
+    /// Whether the Groq transcription row should exist at all.
+    ///
+    /// Both a key and a model are required. A half-configured endpoint would
+    /// offer the user a row that fails every dictation — and unlike cleanup,
+    /// a failed transcription has no raw text to fall back to.
+    var isGroqTranscriptionConfigured: Bool {
+        guard let key = sttAPIKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !key.isEmpty,
+            let model = sttModel?.trimmingCharacters(in: .whitespacesAndNewlines),
             !model.isEmpty
         else { return false }
         return true
@@ -81,7 +105,9 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
             key: \(Self.presence(of: llmAPIKey)), \
             model: \(Self.presence(of: llmModel)), \
             cleanup: \(llmCleanupEnabled), configured: \(isCleanupConfigured), \
-            minHoldMS: \(minHoldMS), minTranscribeMS: \(minTranscribeMS))
+            minHoldMS: \(minHoldMS), minTranscribeMS: \(minTranscribeMS), \
+            sttHost: \(Self.host(of: sttBaseURL)), sttKey: \(Self.presence(of: sttAPIKey)), \
+            sttModel: \(Self.presence(of: sttModel)))
             """
     }
 
@@ -170,6 +196,9 @@ struct EnvConfig: Equatable, Sendable, CustomStringConvertible {
             case "MIN_TRANSCRIBE_MS":
                 config.minTranscribeMS =
                     parseMilliseconds(value, default: defaults.minTranscribeMS)
+            case "STT_BASE_URL": if !value.isEmpty { config.sttBaseURL = value }
+            case "STT_API_KEY": config.sttAPIKey = value
+            case "STT_MODEL": config.sttModel = value
             default: continue  // Unknown keys are ignored, not an error.
             }
         }
