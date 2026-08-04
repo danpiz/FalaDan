@@ -40,8 +40,8 @@ ad-hoc signing on every `just dev` — see [Troubleshooting](#troubleshooting).
 - **Recording history** — browse and copy recent transcriptions
 - **Usage stats** — track recordings, speaking time, word count, and average WPM
 - **Multiple models** — switch between the default fast model (Parakeet: English + 20 European
-  languages), multilingual auto-detect (whisper.cpp), and a custom OpenAI-compatible
-  transcription endpoint
+  languages), multilingual auto-detect (whisper.cpp), Groq (cloud, if configured), and a custom
+  OpenAI-compatible transcription endpoint
 - **Recording indicator** — a pill at the bottom of the screen while FalaDan is listening,
   shown only once a hold is long enough to count as dictation
 - **Optional LLM cleanup** — removes fillers, fixes homophones and punctuation, and applies
@@ -50,12 +50,14 @@ ad-hoc signing on every `just dev` — see [Troubleshooting](#troubleshooting).
 
 ### What leaves your machine
 
-No recording and no transcript, by default. Two things change that, and both are opt-in:
+No recording and no transcript, by default. Three things change that, and all are opt-in:
 
 - **LLM cleanup**, if you configure it in `.env`, sends the transcript *text* — never the
   audio — to the provider you named.
+- **Groq transcription**, if you configure `STT_*` in `.env` and select it in the model picker,
+  uploads the **audio** to Groq. The two local models never do.
 - **Custom transcription mode**, if you select it in the model picker, uploads the **audio
-  itself** to the endpoint you configured. The other two transcription models are local.
+  itself** to the endpoint you configured. The default and multilingual models are local.
 
 FalaDan does make network requests that carry none of your content:
 
@@ -101,6 +103,9 @@ no cleanup call — see [What leaves your machine](#what-leaves-your-machine).
 | `LLM_MODEL` | *(unset)* | Model id for your provider; left blank on purpose — fill in a current one |
 | `LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat-completions endpoint: Groq, Google Gemini (via its OpenAI-compatibility layer), OpenAI, OpenRouter, Ollama, LM Studio. Anthropic's API is a different shape and is not supported |
 | `LLM_CLEANUP` | *(on)* | Set to `off` to skip cleanup and always paste the raw transcript |
+| `STT_API_KEY` | *(unset)* | The Groq row in the model picker is hidden entirely unless both this and `STT_MODEL` are set |
+| `STT_MODEL` | *(unset)* | Groq model id, e.g. `whisper-large-v3-turbo` |
+| `STT_BASE_URL` | `https://api.groq.com/openai/v1` | Groq's OpenAI-compatible transcription endpoint |
 | `MIN_HOLD_MS` | `150` | Holds shorter than this are treated as an accidental tap and discarded; `0` disables the guard |
 | `MIN_TRANSCRIBE_MS` | `300` | Recordings shorter than this are discarded — Whisper hallucinates filler on very short clips |
 
