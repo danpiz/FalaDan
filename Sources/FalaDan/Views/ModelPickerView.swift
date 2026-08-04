@@ -49,6 +49,21 @@ struct ModelPickerView: View {
                 appState.switchTranscriptionMode(to: .multilingual)
             }
 
+            // Hidden rather than disabled when unconfigured: the app has no
+            // settings UI for this, so a visible-but-dead row would point at
+            // nothing the user can act on from here.
+            if appState.envConfig.isGroqTranscriptionConfigured {
+                ModelRow(
+                    icon: "cloud.fill",
+                    title: "Groq",
+                    subtitle: appState.envConfig.sttModel ?? "",
+                    badge: "Cloud",
+                    isSelected: appState.transcriptionMode == .groq
+                ) {
+                    appState.switchTranscriptionMode(to: .groq)
+                }
+            }
+
             ModelRow(
                 icon: "server.rack",
                 title: "Custom",
