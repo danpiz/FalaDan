@@ -105,7 +105,6 @@ if [[ -d "$SPARKLE" ]]; then
 fi
 
 sign_if_present "$APP/Contents/Frameworks/whisper.framework"
-sign_if_present "$APP/Contents/Resources/faladancli"
 
 codesign --force --sign "$IDENTITY" \
     --entitlements "$ENTITLEMENTS" \

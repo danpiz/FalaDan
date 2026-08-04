@@ -9,7 +9,6 @@ let package = Package(
     ],
     products: [
         .executable(name: "FalaDan", targets: ["FalaDan"]),
-        .executable(name: "faladancli", targets: ["FalaDanCLI"]),
     ],
     dependencies: [
         .package(
@@ -31,17 +30,6 @@ let package = Package(
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
                 .define("ENABLE_SPARKLE"),
-            ]
-        ),
-        .executableTarget(
-            name: "FalaDanCLI",
-            dependencies: [
-                "FluidAudio",
-                "whisper",
-            ],
-            path: "Sources/FalaDanCLI",
-            swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
         .binaryTarget(

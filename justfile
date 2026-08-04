@@ -21,7 +21,6 @@ dev: kill build package
 [group('build')]
 build:
     swift build --product FalaDan
-    swift build --product faladancli
 
 # Create .app bundle (debug)
 [group('build')]
