@@ -244,12 +244,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyDelegate = delegate
         hotkeyManager = manager
 
-        // Wire up recording state changes so HotkeyManager knows when cancel is valid
+        // Wire up recording state changes so HotkeyManager knows when cancel is
+        // valid, and so the floating indicator follows the recording.
+        //
+        // Both concerns share these closures — the indicator is added to them,
+        // never in place of the manager calls, which is what keeps Esc-to-cancel
+        // knowing whether a recording is live.
+        let minimumHold = appState.envConfig.minHold
         appState.onRecordingStarted = { [weak manager] in
             manager?.recordingDidStart()
+            RecordingIndicatorController.shared.recordingStarted(minimumHold: minimumHold)
         }
         appState.onRecordingEnded = { [weak manager] in
             manager?.recordingDidEnd()
+            RecordingIndicatorController.shared.recordingEnded()
         }
 
         // Restart once permissions land so anything that needed Accessibility
